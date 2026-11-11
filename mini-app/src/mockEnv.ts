@@ -72,7 +72,6 @@ if (import.meta.env.DEV) {
           ['user', JSON.stringify({ id: 1, first_name: 'Vladislav', username: 'vlad' })],
           ['chat_instance', '5544007052087859818'],
           // ['start_param', 'payment=fd447af8cbeb9343e6839d918fb8249c14264c10efb49417964a859a262ecee9']
-          // ['start_param', 'app=yourvoice']
         ]).toString()],
         ['tgWebAppVersion', '8.4'],
         ['tgWebAppPlatform', 'tdesktop'],

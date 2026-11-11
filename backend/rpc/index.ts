@@ -1,66 +1,41 @@
-import * as z from "zod";
-
-import { createUserHandler } from "./user-service/createUser"
-import { searchLightningAddressHandler } from "./user-service/searchLightningAddress"
-import { registerPaymentHandler } from "./payment-service/registerPayment"
-import { notifyPaymentHandler } from "./payment-service/notifyPayment";
-import { fetchPriceHandler } from "./coingecko-service/fetchPrice";
-import { botInfoHandler } from "./bot-service/bot-info";
-import { createOrgHandler } from "./vote-service/createOrg";
-import { createPollHandler } from "./vote-service/createPoll";
-import { listActivePollsHandler } from "./vote-service/listActivePolls";
-import { listPastPollsHandler } from "./vote-service/listPastPolls";
-import { getPollHandler } from "./vote-service/getPoll";
-import { registerVoteHandler } from "./vote-service/registerVote";
-import { checkVoteHandler } from "./vote-service/checkVote";
-import { listChatIdOrgsHandler } from "./vote-service/listChatIdOrg";
-import { listOrgPollsHandler } from "./vote-service/listOrgPolls";
-import { removeOrgHandler } from "./vote-service/removeOrg";
+import * as z from 'zod'
+import type { Env } from '../env.js'
+import { json } from '../http.js'
+import { botInfoHandler } from './bot-service/bot-info.js'
+import { notifyPaymentHandler } from './payment-service/notifyPayment.js'
+import { verifyProfileHandler } from './user-service/verifyProfile.js'
 
 const OperationSchema = z.object({
   operation: z.string(),
-  payload: z.any().optional(),
-});
+  payload: z.unknown().optional()
+})
 
-const handlers: { [key: string]: any } = {
-  "bot-info": botInfoHandler,
-  "create-user": createUserHandler,
-  "search-lightning-address": searchLightningAddressHandler,
-  "register-payment": registerPaymentHandler,
-  "notify-payment": notifyPaymentHandler,
-  "fetch-price": fetchPriceHandler,
-  "create-org": createOrgHandler,
-  "list-my-orgs": listChatIdOrgsHandler,
-  "create-poll": createPollHandler,
-  "list-active-polls": listActivePollsHandler,
-  "list-past-polls": listPastPollsHandler,
-  "get-poll": getPollHandler,
-  "register-vote": registerVoteHandler,
-  "check-vote": checkVoteHandler,
-  'list-org-polls': listOrgPollsHandler,
-  'remove-org': removeOrgHandler
+type Handler = (payload: unknown, env: Env) => Promise<Response>
+
+const handlers: Record<string, Handler> = {
+  'bot-info': botInfoHandler,
+  'verify-profile': verifyProfileHandler,
+  'notify-payment': notifyPaymentHandler
 }
 
-export const rpcHandler = async (req: any, res: any) => {
-  const parsingResult = OperationSchema.safeParse(req.body)
-  if (!parsingResult.success) {
-    return res.status(400).json({ error: parsingResult.error })
+export const rpcHandler = async (request: Request, env: Env): Promise<Response> => {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400)
   }
 
-  const { operation, payload } = parsingResult.data
-  const handler = handlers[operation]
+  const parsed = OperationSchema.safeParse(body)
+  if (!parsed.success) return json({ error: parsed.error }, 400)
 
-  if (!handler) {
-    return res.status(400).json({ error: `invalid operation: ${operation}` })
-  }
+  const handler = handlers[parsed.data.operation]
+  if (!handler) return json({ error: `invalid operation: ${parsed.data.operation}` }, 400)
 
   try {
-    if (payload) {
-      req.body = payload
-    }
-    await handler(req, res)
-  } catch (err) {
-    console.error(err)
-    return res.status(500).json({ error: 'internal server error' })
+    return await handler(parsed.data.payload ?? {}, env)
+  } catch (error) {
+    console.error(`RPC operation ${parsed.data.operation} failed:`, error)
+    return json({ error: 'internal server error' }, 500)
   }
 }

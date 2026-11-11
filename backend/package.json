@@ -1,40 +1,23 @@
 {
-  "name": "backend",
+  "name": "brio-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development tsx index.ts",
-    "build": "esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "npm run build && NODE_ENV=production node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "wrangler dev --port 3000",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "tail": "wrangler tail",
+    "test": "npm run typecheck"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.908.0",
-    "@aws-sdk/client-s3": "^3.911.0",
-    "@coingecko/coingecko-typescript": "^2.2.0",
-    "axios": "^1.12.2",
-    "better-sqlite3": "^12.4.1",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
-    "express": "^5.1.0",
-    "level": "^10.0.0",
-    "node-cron": "^4.2.1",
-    "telegraf": "^4.16.3",
-    "tweetnacl": "^1.0.3",
-    "zod": "^4.1.11"
+    "@noble/curves": "^2.4.0",
+    "nostr-tools": "^2.26.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.5",
-    "@types/node": "^24.10.0",
-    "esbuild": "^0.25.11",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "@cloudflare/workers-types": "^5.20261110.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.159.0"
   }
 }

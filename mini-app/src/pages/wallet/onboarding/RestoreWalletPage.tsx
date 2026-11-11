@@ -7,6 +7,8 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { storeSessionMnemonic } from "@/lib/wallet/context";
+import { cn } from "@/lib/utils";
+import { haptics } from "@/lib/telegram/ui";
 
 export function RestoreWalletPage() {
     const { t } = useTranslation();
@@ -57,42 +59,54 @@ export function RestoreWalletPage() {
         storeSessionMnemonic(mnemonic.join(' '))
     }, [mnemonic]);
 
+    const valid = bip39.validateMnemonic(mnemonic.join(' '), wordlist)
+
     const secureWallet = (e: FormEvent) => {
         e.preventDefault()
-         navigate('/app/nowallet/secure-wallet')
+        haptics.impact()
+        navigate('/app/nowallet/secure-wallet')
     }
     
     return (
         <Page back={true}>
-            <form className="flex flex-col gap-20" onSubmit={secureWallet}>
-                <div className='flex flex-col gap-5'>
-                    <div className="flex flex-col gap-10">
-                        <h2 className='text-4xl'>{t('walletRestore.title')}</h2>
-                        <p>{t('walletRestore.description')}</p>
-                    </div>
+            <form className="mx-auto flex w-full max-w-md flex-col gap-6 py-2" onSubmit={secureWallet}>
+                <div className="flex flex-col gap-2">
+                    <h2 className="text-2xl font-semibold">{t('walletRestore.title')}</h2>
+                    <p className="text-sm text-gray-500">{t('walletRestore.description')}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                    {mnemonic.map((_word, index) => (
-                        <input
-                            key={index}
-                            className={`border-2 rounded p-2 h-10 text-primary ${
-                                error ? 'border-red-500 text-red-500' : 'border-primary'
-                            }`}
-                            onChange={(e) => {
-                                const updated = [...mnemonic];
-                                updated[index] = e.target.value;
-                                setMnemonic(updated);
-                            }}
-                            value={mnemonic[index]}
-                        />
-                    ))}
-                    {error && <p className="col-span-3 text-red-500 text-sm italic mt-2">{error}</p>}
-                </div>
-                {mnemonic.join('').length > 0 && !error && (
-                    <div className="flex justify-center">
-                        <Button type="submit">{t('walletRestore.nextButton')}</Button>
+
+                <div className="app-card p-4">
+                    <div className="grid grid-cols-3 gap-2">
+                        {mnemonic.map((_word, index) => (
+                            <div key={index} className="relative">
+                                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums text-gray-300">
+                                    {index + 1}
+                                </span>
+                                <input
+                                    className={cn(
+                                        "h-11 w-full rounded-xl bg-gray-50 pl-6 pr-2 text-base text-gray-900 outline-none transition-shadow focus:ring-2 focus:ring-primary/30",
+                                        error && "ring-1 ring-red-300"
+                                    )}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    onChange={(e) => {
+                                        setError(null);
+                                        const updated = [...mnemonic];
+                                        updated[index] = e.target.value;
+                                        setMnemonic(updated);
+                                    }}
+                                    value={mnemonic[index]}
+                                />
+                            </div>
+                        ))}
                     </div>
-                )}
+                    {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+                </div>
+
+                <Button className="w-full" type="submit" disabled={!valid}>
+                    {t('walletRestore.nextButton')}
+                </Button>
             </form>
         </Page>
     );

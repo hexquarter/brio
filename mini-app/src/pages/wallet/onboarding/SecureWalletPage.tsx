@@ -1,153 +1,123 @@
-
 import { Page } from "@/components/Page";
 import { Button } from "@/components/ui/button";
 import { getSessionMnemonic, useWallet } from "@/lib/wallet/context";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useTranslation } from "react-i18next";
 
-import { retrieveRawInitData, requestContact } from "@telegram-apps/sdk-react";
 import { Progress } from "@/components/ui/progress";
 
-import { registerUser } from "@/lib/wallet/api";
-import { buf2hex, generateChildKey, generateTapRootAddress, hash } from "@/helpers/crypto";
+import { generateChildKey, generateTapRootAddress } from "@/helpers/crypto";
+import { useNavigate } from "react-router-dom";
+import { publishAndVerifyProfile } from "@/lib/nostr/profile";
+import { passkeyUnavailableReason } from "@/lib/wallet/passkey";
+import { ShieldCheck } from "lucide-react";
+import { haptics } from "@/lib/telegram/ui";
 
 export function SecureWalletPage() {
     const wallet = useWallet()
     const { t } = useTranslation();
+    const navigate = useNavigate()
     const [progressValue, setProgressValue] = useState(0)
     const [progressLabel, setProgressLabel] = useState("")
 
-    const [error, setError] = useState<string | null>(null);    
-
-    useEffect(() => {
-        secureWallet()
-    }, [])
+    const [error, setError] = useState<string | null>(null);
+    const passkeyIssue = passkeyUnavailableReason();
 
     async function secureWallet() {
         try {
+            setError(null)
+            haptics.impact()
             setProgressValue(1)
             setProgressLabel(t('walletSecure.progress1'))
-            const mnemonic = getSessionMnemonic() as string
+            const mnemonic = getSessionMnemonic()
+            if (!mnemonic) throw new Error('Wallet recovery phrase is missing. Return to setup and try again.')
+
+            if (!wallet.walletExists) {
+                await wallet.storeWallet(mnemonic)
+            }
             const sdk = await wallet.loadSdk(mnemonic)
             if (!sdk) {
-                setError("Cannot load the sdk")
-                return 
+                throw new Error("Cannot load the Breez SDK.")
             }
 
-            await new Promise(r => setTimeout(r, 1000));
-            
             const childKey = await generateChildKey(mnemonic)
             if (!childKey.publicKey) {
-                setError('Cannot retrieve Bitcoin public key')
-                return
+                throw new Error('Cannot retrieve Bitcoin public key.')
             }
-            const childPubkeyHex = buf2hex(new Uint8Array(childKey.publicKey).buffer)
             const tapRootAddress = await generateTapRootAddress(childKey.publicKey)
             if (!tapRootAddress) {
-                setError('Cannot retrieve Bitcoin address')
-                return
+                throw new Error('Cannot retrieve Bitcoin address.')
             }
-            await new Promise(r => setTimeout(r, 1000));
-    
+
             setProgressValue(33)
-    
             setProgressLabel(t('walletSecure.progress33'))
-            let hashedPhoneNumber: undefined | string = undefined
 
-            if (import.meta.env.DEV) {
-                hashedPhoneNumber = await hash('+33123456789')
-            }
-            else {
-                const result = requestContact.ifAvailable()
-                if (result[0]) {
-                    try {
-                        const contact = await result[1]
-                        let phoneNumber = contact.contact.phone_number
-                        if (!phoneNumber.startsWith('+')) {
-                            phoneNumber = `+${phoneNumber}`
-                        }
-                        hashedPhoneNumber = await hash(phoneNumber)
-                        console.log(hashedPhoneNumber)
-                    }
-                    catch(e) {}
-                }
-            }
-
-            const lp = retrieveRawInitData()
-            if (!lp) {
-                setError('Cannot retrieve Telegram init data')
-                return
-            }
-
-            await new Promise(r => setTimeout(r, 2000));
-    
             setProgressLabel(t('walletSecure.progress66'))
             setProgressValue(66)
             const registerLightningAddressRequest = { username: tapRootAddress }
             const available = await sdk.checkLightningAddressAvailable(registerLightningAddressRequest)
-            let info
-            if (available) {
-                info = await sdk.registerLightningAddress(registerLightningAddressRequest)
-            }
-            else {
-                info = await sdk.getLightningAddress()
-            }
-
-            if (!info?.lnurl) {
-                setError(t('walletSecure.noLightningAddressGenerated'))
-                return
+            const info = available
+                ? await sdk.registerLightningAddress(registerLightningAddressRequest)
+                : await sdk.getLightningAddress()
+            if (!info?.lightningAddress || !info.lnurl?.url) {
+                throw new Error(t('walletSecure.noLightningAddressGenerated'))
             }
 
-            const response = await registerUser({
-                tapRootAddress: tapRootAddress, 
-                publicKey: childPubkeyHex, 
-                breezBtcAddress: await wallet.getBtcAddress(sdk) as string, 
-                breezLnUrl: info.lnurl,
-                tgInitData: lp,
-                hashedPhoneNumber: hashedPhoneNumber
-            })
-    
-            await new Promise(r => setTimeout(r, 2000));
-    
-            if (response.status < 400) {
-                await wallet.storeWallet(mnemonic)
-                setProgressValue(100)
-                setProgressLabel(t('walletSecure.progress100'))
-                return
+            const btcAddress = await wallet.getBtcAddress(sdk)
+            if (!btcAddress) {
+                throw new Error('Cannot retrieve Bitcoin address.')
             }
-    
-            setError(JSON.stringify(await response.json()))
+
+            await publishAndVerifyProfile(mnemonic, sdk, btcAddress)
+
+            setProgressValue(100)
+            setProgressLabel(t('walletSecure.progress100'))
+            haptics.success()
         }
         catch (e) {
             console.error(e)
-            setError((e as Error).message)
+            haptics.error()
+            setError(e instanceof Error ? e.message : String(e))
+            setProgressValue(0)
+            setProgressLabel("")
         }
-    }
-
-    function goToWallet() {
-        window.location.replace('/#/app/wallet');
     }
 
     return (
         <Page back={false}>
-            <div className="flex flex-col gap-10">
-                <div className='flex flex-col gap-5'>
-                    <div className="flex flex-col gap-10">
-                        <h2 className='text-4xl'>{t('walletSecure.title')}</h2>
-                    </div>
+            <div className="mx-auto flex w-full max-w-md flex-col gap-6 py-6">
+                <div className="flex flex-col items-center gap-3 text-center">
+                    <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF942C] to-[#F97316] text-white shadow-sm">
+                        <ShieldCheck className="h-8 w-8" />
+                    </span>
+                    <h2 className="text-2xl font-semibold">{t('walletSecure.title')}</h2>
                 </div>
-                {error && <p className="text-red-500 text-sm italic mt-2">{error}</p>}
-                <div className="flex justify-center items-center flex-col gap-5">
-                    {progressValue > 0 &&
-                        <div className="flex flex-col gap-5 w-full text-center">
+
+                {passkeyIssue && (
+                    <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{passkeyIssue}</p>
+                )}
+                {error && (
+                    <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>
+                )}
+
+                <div className="app-card flex flex-col gap-4 p-5">
+                    {progressValue === 0 && (
+                        <Button type="button" className="w-full" disabled={!!passkeyIssue} onClick={() => void secureWallet()}>
+                            {t('walletSecure.registerButton')}
+                        </Button>
+                    )}
+                    {progressValue > 0 && (
+                        <div className="flex flex-col gap-4 text-center">
                             <Progress value={progressValue} />
-                            <p>{progressLabel}</p>
+                            <p className="text-sm text-gray-600">{progressLabel}</p>
                         </div>
-                    }
-                    {progressValue == 100 &&
-                        <Button type="button" onClick={() => goToWallet()}>{t('walletSecure.goToWalletButton')}</Button>
-                    }
+                    )}
+                    {progressValue === 100 && (
+                        <Button type="button" className="w-full" onClick={() => navigate('/app/wallet')}>
+                            {t('walletSecure.goToWalletButton')}
+                        </Button>
+                    )}
                 </div>
             </div>
         </Page>

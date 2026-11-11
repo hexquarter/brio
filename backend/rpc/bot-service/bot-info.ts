@@ -1,17 +1,13 @@
-import { Telegraf } from "telegraf";
+import type { Env } from '../../env.js'
+import { json } from '../../http.js'
+import { getBotInfo } from '../../bot/index.js'
 
-export const botInfoHandler = async (req: { bot: Telegraf }, res: any) => {
+export const botInfoHandler = async (_payload: unknown, env: Env) => {
   try {
-    if (req.bot === null) {
-      return res.status(503).json({ error: "bot not initialized" })
-    }
-
-    const botInfo = await req.bot.telegram.getMe();
-    res.json(botInfo)
-  }
-  catch (e) {
-    const error = e as Error
-    console.error('Fetch bot info error:', error);
-    res.status(500).json({ error: error.message })
+    return json(await getBotInfo(env))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('Fetch bot info error:', message)
+    return json({ error: message }, 500)
   }
 }

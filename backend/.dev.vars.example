@@ -1,0 +1,7 @@
+BOT_TOKEN=123456789:replace-me
+NOSTR_PRIVATE_KEY=nsec1replace-me
+NOSTR_RELAYS=wss://relay.primal.net,wss://relay.snort.social,wss://relay.nostr.net,wss://nostr.bitcoiner.social,wss://relay.nostrcheck.me
+BOT_USERNAME=brio_bot
+TELEGRAM_WEBHOOK_SECRET=replace-me
+ENVIRONMENT=development
+ALLOW_UNVERIFIED_TELEGRAM_DEV=false
