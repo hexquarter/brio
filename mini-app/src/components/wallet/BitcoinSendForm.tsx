@@ -5,13 +5,14 @@ import { useState, useEffect, useRef} from "react";
 import { t } from "i18next";
 import { Button } from "@/components/ui/button"
 import { convertSatsToBtc, convertBtcToSats, formatBtcAmount, formatFiatAmount } from "@/helpers/number";
-import { useWallet } from "@/lib/wallet/context";
-import { InputType, PrepareLnurlPayResponse, PrepareSendPaymentResponse, SendPaymentOptions } from "@breeztech/breez-sdk-spark";
+import { getSessionMnemonic, useWallet } from "@/lib/wallet/context";
+import { InputType, Payment, PrepareLnurlPayResponse, PrepareSendPaymentResponse, SendPaymentOptions } from "@breeztech/breez-sdk-spark";
 import { Spinner } from "@telegram-apps/telegram-ui";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { parse } from "@breeztech/breez-sdk-spark/web";
 import { openQrScanner } from "@telegram-apps/sdk-react";
-import { fetchPrice, registerPayment } from "@/lib/wallet/api";
+import { fetchPrice } from "@/lib/wallet/api";
+import { publishPayment } from "@/lib/nostr/client";
+import { haptics, hasMainButton, useMainButton } from "@/lib/telegram/ui";
 
 
 export const BitcoinSendForm  = () => {
@@ -22,10 +23,10 @@ export const BitcoinSendForm  = () => {
     const [fiatAmount, setFiatAmount] = useState<string | number>("")
     const [btcAmount, setBtcAmount] = useState(0)
     const [prepareResponse, setPrepareResponse] = useState<
-        PrepareLnurlPayResponse | 
-        PrepareSendPaymentResponse | 
+        PrepareLnurlPayResponse |
+        PrepareSendPaymentResponse |
         undefined
-    >(undefined) 
+    >(undefined)
 
     // const [scanner, setScanner] = useState(false)
     const [parseAddressError, setParseAddressError] = useState<string|null>(null)
@@ -50,6 +51,25 @@ export const BitcoinSendForm  = () => {
         }
     }
 
+    const publishClientPayment = async (payment: Payment) => {
+        const mnemonic = getSessionMnemonic()
+        if (!mnemonic) return
+        try {
+            // The destination pubkey of a Lightning payment is the routing node, not a
+            // Nostr identity, so this form cannot resolve a recipient to notify.
+            await publishPayment(mnemonic, {
+                paymentId: payment.id,
+                paymentHash: payment.details?.type === 'lightning'
+                    ? payment.details.htlcDetails.paymentHash
+                    : undefined,
+                amountSats: Number(payment.amount),
+                method: payment.details?.type === 'withdraw' ? 'btc' : 'lightning'
+            })
+        } catch (error) {
+            console.error('Unable to publish the payment record:', error)
+        }
+    }
+
     // const onScannerResult = (detectedCodes: IDetectedBarcode[]) => {
     //     if (detectedCodes.length == 0) {
     //         return
@@ -62,16 +82,17 @@ export const BitcoinSendForm  = () => {
         const handleAddressChange = async (address: string) => {
             setParseAddressError(null)
             try {
-                const inputType = await parse(address)
-                if (inputType.type != 'bitcoinAddress' && 
-                    inputType.type != 'lightningAddress' && 
-                    inputType.type != 'lnurlPay' && 
+                if (!breezSdk) return
+                const inputType = await breezSdk.parse(address)
+                if (inputType.type != 'bitcoinAddress' &&
+                    inputType.type != 'lightningAddress' &&
+                    inputType.type != 'lnurlPay' &&
                     inputType.type != 'bolt11Invoice') {
                     setParseAddressError(t('wallet.addressUnknown'))
                     return
                 }
                 setInputType(inputType)
-               
+
                 const price = await fetchPrice(currency)
                 setPrice(price)
 
@@ -84,7 +105,7 @@ export const BitcoinSendForm  = () => {
             catch(e) {
                 setParseAddressError((e as Error).message)
             }
-        }   
+        }
         if (breezSdk && address != '') {
             handleAddressChange(address)
         }
@@ -116,7 +137,7 @@ export const BitcoinSendForm  = () => {
                 switch(inputType.type) {
                     case "lnurlPay":
                         {const prepareResponse = await breezSdk?.prepareLnurlPay({
-                            amountSats: convertBtcToSats(btc),
+                            amount: BigInt(convertBtcToSats(btc)),
                             payRequest: inputType,
                         })
                         setLoadingPayment(null)
@@ -135,7 +156,7 @@ export const BitcoinSendForm  = () => {
                         break
                     case "lightningAddress":
                         {const prepareResponse = await breezSdk?.prepareLnurlPay({
-                            amountSats: convertBtcToSats(btc),
+                            amount: BigInt(convertBtcToSats(btc)),
                             payRequest: inputType.payRequest,
                         })
 
@@ -154,8 +175,8 @@ export const BitcoinSendForm  = () => {
                         break
                     case "bitcoinAddress":
                         {const prepareResponse = await breezSdk?.prepareSendPayment({
-                            paymentRequest: inputType.address,
-                            amountSats: convertBtcToSats(btc)
+                            paymentRequest: { type: 'input', input: inputType.address },
+                            amount: BigInt(convertBtcToSats(btc))
                         })
                          if (!prepareResponse) {
                             throw new Error('Unable to prepare Bitcoin payment')
@@ -177,8 +198,8 @@ export const BitcoinSendForm  = () => {
                         break
                     case "bolt11Invoice":
                         const prepareResponse = await breezSdk?.prepareSendPayment({
-                            paymentRequest: inputType.invoice.bolt11,
-                            amountSats: inputType.amountMsat ? undefined : convertBtcToSats(btc)
+                            paymentRequest: { type: 'input', input: inputType.invoice.bolt11 },
+                            amount: inputType.amountMsat ? undefined : BigInt(convertBtcToSats(btc))
                         })
                          if (!prepareResponse) {
                             throw new Error('Unable to prepare Bolt11 payment')
@@ -186,7 +207,7 @@ export const BitcoinSendForm  = () => {
                         if (prepareResponse.paymentMethod.type === 'bolt11Invoice') {
                             const feeQuote = prepareResponse.paymentMethod.lightningFeeSats + (prepareResponse.paymentMethod.sparkTransferFeeSats || 0)
                             setFees(feeQuote)
-                            const reducedBtc = convertSatsToBtc(prepareResponse.amountSats + feeQuote)
+                            const reducedBtc = convertSatsToBtc(Number(prepareResponse.amount) + feeQuote)
                             const remaining = btcBalance - reducedBtc
                             if (remaining < 0) {
                                 setSendError('Unsufficient funds')
@@ -213,7 +234,11 @@ export const BitcoinSendForm  = () => {
 
     const drain = async () => {
         setLoadingAll(true)
-        const inputType = await parse(address)
+        if (!breezSdk) {
+            setLoadingAll(false)
+            return
+        }
+        const inputType = await breezSdk.parse(address)
         if (!inputType) {
             setLoadingAll(false)
             return
@@ -223,7 +248,7 @@ export const BitcoinSendForm  = () => {
             switch(inputType.type) {
                 case "lnurlPay":
                     const lnUrlPayPrepareResponse = await breezSdk?.prepareLnurlPay({
-                        amountSats: convertBtcToSats(btcBalance),
+                        amount: BigInt(convertBtcToSats(btcBalance)),
                         payRequest: inputType,
                     })
                     if (lnUrlPayPrepareResponse) {
@@ -232,7 +257,7 @@ export const BitcoinSendForm  = () => {
                     break
                 case "lightningAddress":
                     const lnPrepareResponse = await breezSdk?.prepareLnurlPay({
-                        amountSats: convertBtcToSats(btcBalance),
+                        amount: BigInt(convertBtcToSats(btcBalance)),
                         payRequest: inputType.payRequest,
                     })
                     if (lnPrepareResponse) {
@@ -241,8 +266,8 @@ export const BitcoinSendForm  = () => {
                     break
                 case "bitcoinAddress":
                     const btcPrepareResponse = await breezSdk?.prepareSendPayment({
-                        paymentRequest: inputType.address,
-                        amountSats: convertBtcToSats(btcBalance)
+                        paymentRequest: { type: 'input', input: inputType.address },
+                        amount: BigInt(convertBtcToSats(btcBalance))
                     })
                      if (btcPrepareResponse && btcPrepareResponse.paymentMethod.type === 'bitcoinAddress') {
                         const feeQuote = btcPrepareResponse.paymentMethod.feeQuote
@@ -252,8 +277,8 @@ export const BitcoinSendForm  = () => {
                     break
                 case "bolt11Invoice":
                     const bolt11PrepareResponse = await breezSdk?.prepareSendPayment({
-                        paymentRequest: inputType.invoice.bolt11,
-                        amountSats: inputType.amountMsat ? undefined : convertBtcToSats(btcBalance)
+                        paymentRequest: { type: 'input', input: inputType.invoice.bolt11 },
+                        amount: inputType.amountMsat ? undefined : BigInt(convertBtcToSats(btcBalance))
                     })
                     if (bolt11PrepareResponse && bolt11PrepareResponse.paymentMethod.type === 'bolt11Invoice') {
                         fees = bolt11PrepareResponse.paymentMethod.lightningFeeSats + (bolt11PrepareResponse.paymentMethod.sparkTransferFeeSats || 0)
@@ -281,20 +306,26 @@ export const BitcoinSendForm  = () => {
             if (!inputType && !prepareResponse) return
             switch(inputType?.type) {
                 case "lnurlPay":
-                    await breezSdk?.lnurlPay({
-                        prepareResponse: prepareResponse as PrepareLnurlPayResponse
-                    })
-                    await new Promise(r => setTimeout(r, 1000));
-                    setLoadingPayment(null)
-                    navigate('/wallet/activity')
+                    {
+                        const res = await breezSdk?.lnurlPay({
+                            prepareResponse: prepareResponse as PrepareLnurlPayResponse
+                        })
+                        if (res?.payment) await publishClientPayment(res.payment)
+                        await new Promise(r => setTimeout(r, 1000));
+                        setLoadingPayment(null)
+                        navigate('/wallet/activity')
+                    }
                     break
                 case "lightningAddress":
-                    await breezSdk?.lnurlPay({
-                        prepareResponse: prepareResponse as PrepareLnurlPayResponse
-                    })
-                    await new Promise(r => setTimeout(r, 1000));
-                    setLoadingPayment(null)
-                    navigate('/wallet/activity')
+                    {
+                        const res = await breezSdk?.lnurlPay({
+                            prepareResponse: prepareResponse as PrepareLnurlPayResponse
+                        })
+                        if (res?.payment) await publishClientPayment(res.payment)
+                        await new Promise(r => setTimeout(r, 1000));
+                        setLoadingPayment(null)
+                        navigate('/wallet/activity')
+                    }
                     break
                 case "bitcoinAddress":
                     {
@@ -306,11 +337,7 @@ export const BitcoinSendForm  = () => {
                             prepareResponse: prepareResponse as PrepareSendPaymentResponse,
                             options
                         })
-                        if (res && res.payment.details?.type == 'withdraw') {
-                            // Register the btc payment upfront as the user will not wait 10 min to await conf
-                            const txId = res.payment.details?.txId
-                            await registerPayment('btc', txId, convertSatsToBtc(res.payment.amount))
-                        }
+                        if (res?.payment) await publishClientPayment(res.payment)
 
                         await new Promise(r => setTimeout(r, 1000));
                         setLoadingPayment(null)
@@ -324,10 +351,11 @@ export const BitcoinSendForm  = () => {
                             preferSpark: false,
                             completionTimeoutSecs: 10
                         }
-                        await breezSdk?.sendPayment({
+                        const res = await breezSdk?.sendPayment({
                             prepareResponse: prepareResponse as PrepareSendPaymentResponse,
                             options
                         })
+                        if (res?.payment) await publishClientPayment(res.payment)
                         await new Promise(r => setTimeout(r, 1000));
                         setLoadingPayment(null)
                         navigate('/wallet/activity')
@@ -343,68 +371,123 @@ export const BitcoinSendForm  = () => {
         }
     }
 
+    const applyPreset = (fraction: number) => {
+        if (!price || !btcBalance) return
+        haptics.selection()
+        const amount = parseFloat(formatFiatAmount(btcBalance * price * fraction, 2))
+        void handleAmountChange(amount)
+    }
+
+    const canSend = Boolean(inputType && prepareResponse && !sendError && !parseAddressError)
+    const nativeButton = hasMainButton()
+
+    useMainButton({
+        text: t('wallet.sendButton'),
+        onClick: () => { void handleSend() },
+        visible: nativeButton && canSend,
+        enabled: nativeButton && canSend && !loadingPayment,
+        loading: Boolean(loadingPayment && prepareResponse)
+    })
+
     return (
-        <div className='flex flex-col gap-10 pt-10 '>
-            <div>
-                <Label htmlFor="address" className='text-gray-400'>{t('wallet.address')}</Label>
-                <div className="flex flex-col gap-2">
-                    <div className='flex items-center gap-5 border-b border-gray-200 hover:border-primary'>
-                        <Input 
-                            id="address" 
-                            type="text"
-                            placeholder={t('wallet.bitcoin.address.placeholder')} 
-                            value={address} 
-                            onChange={(e) => setAddress(e.target.value)} 
-                            autoCorrect="false"
-                            autoCapitalize="false"
-                            spellCheck="false"/>
-                        <LuCopy className="w-5 h-5" onClick={() => pasteAddress()}/>
-                        <LuScanLine className="w-5 h-5" onClick={() => showScanner()}/>
-                    </div>
-                    { parseAddressError &&
-                        <p className="text-red-500 text-sm italic mt-2">{parseAddressError}</p>
-                    }
+        <div className='flex flex-col gap-5'>
+            <div className="app-card p-4">
+                <Label htmlFor="address" className='text-xs font-medium text-gray-400'>{t('wallet.address')}</Label>
+                <div className="flex items-center gap-3">
+                    <Input
+                        id="address"
+                        type="text"
+                        placeholder={t('wallet.bitcoin.address.placeholder')}
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        autoCorrect="false"
+                        autoCapitalize="false"
+                        spellCheck="false"/>
+                    <button type="button" aria-label="Paste" onClick={() => void pasteAddress()} className="shrink-0 text-gray-400 active:text-primary">
+                        <LuCopy className="h-5 w-5" />
+                    </button>
+                    <button type="button" aria-label="Scan" onClick={() => void showScanner()} className="shrink-0 text-gray-400 active:text-primary">
+                        <LuScanLine className="h-5 w-5" />
+                    </button>
                 </div>
-                {/* {scanner && <Scanner onScan={onScannerResult} />} */}
+                { parseAddressError &&
+                    <p className="mt-2 text-sm text-red-500">{parseAddressError}</p>
+                }
             </div>
-            
-            { inputType && price > 0 && 
-                <div>
-                    <div className="flex justify-between">
-                        <Label htmlFor="amount" className='text-gray-400'>{t('wallet.amount')} ({currency})</Label>
-                        <Button variant="outline" className="p-3 rounded-sm h-0 text-xs border-gray-200" onClick={drain}>
-                            All
-                            {loadingAll && <Spinner size="s" />}
-                        </Button>
+
+            { inputType && price > 0 &&
+                <div className="app-card flex flex-col gap-3 p-4">
+                    <Label htmlFor="amount" className='text-xs font-medium text-gray-400'>
+                        {t('wallet.amount')} ({currency})
+                    </Label>
+                    <div className="relative">
+                        <Input
+                            id="amount"
+                            type="number"
+                            min={0}
+                            step={0.001}
+                            inputMode='decimal'
+                            value={fiatAmount}
+                            onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
+                            className="h-12 border-0 pr-14 text-2xl font-semibold tabular-nums focus-visible:border-0" />
+                        <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-400">
+                            {currency}
+                        </span>
                     </div>
-                    <Input 
-                        type="number" 
-                        min={0} 
-                        step={0.001} 
-                        inputMode='decimal'
-                        value={fiatAmount} 
-                        onChange={(e) => handleAmountChange(parseFloat(e.target.value))} /> 
-                    <small>{formatBtcAmount(btcAmount)} BTC</small>
+                    <small className="text-xs text-gray-400">{formatBtcAmount(btcAmount)} BTC</small>
+                    <div className="flex gap-2">
+                        {[0.25, 0.5, 0.75].map(fraction => (
+                            <button
+                                key={fraction}
+                                type="button"
+                                onClick={() => applyPreset(fraction)}
+                                className="flex-1 rounded-xl bg-gray-100 py-2 text-xs font-medium text-gray-600 transition-colors active:bg-gray-200"
+                            >
+                                {fraction * 100}%
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => { haptics.selection(); void drain() }}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-gray-100 py-2 text-xs font-medium text-gray-600 transition-colors active:bg-gray-200"
+                        >
+                            {t('wallet.send.all')}
+                            {loadingAll && <Spinner size="s" />}
+                        </button>
+                    </div>
                 </div>
             }
-            <div className="flex flex-col items-center">
-                {!loadingPayment &&
-                    <div className="text-center flex flex-col gap-2 items-center">
-                        {!sendError && <Button className="w-40" onClick={() => handleSend()}>Send</Button>}
-                        {fees > 0 && 
-                            <div>
-                                <p className="text-xs">{t('fees')}: {formatBtcAmount(convertSatsToBtc(fees))} BTC / {formatFiatAmount(convertSatsToBtc(fees) * price, 4)} {currency}</p>
-                                <p className="text-xs">{t('remaining')} : {formatBtcAmount(remaining)} BTC / {formatFiatAmount(remaining * price, 4)} {currency}</p>
-                            </div>
-                        }
-                    </div>}
-                 {loadingPayment && 
-                            <div className='flex flex-col items-center gap-2'>
-                                <Spinner size="s"/>
-                                <p className="text-xs">{loadingPayment}</p>
-                            </div>}
+            <div className="flex flex-col gap-3">
+                {fees > 0 && !sendError &&
+                    <div className="app-card flex flex-col gap-2 p-4 text-sm">
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">{t('fees')}</span>
+                            <span className="tabular-nums">{formatBtcAmount(convertSatsToBtc(fees))} BTC</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">{t('remaining')}</span>
+                            <span className="tabular-nums">{formatBtcAmount(remaining)} BTC</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                            <span />
+                            <span>{formatFiatAmount(remaining * price, 4)} {currency}</span>
+                        </div>
+                    </div>
+                }
+                {!nativeButton && !sendError && canSend &&
+                    <Button className="w-full" disabled={!!loadingPayment} onClick={() => void handleSend()}>
+                        {loadingPayment && <Spinner size="s" />}
+                        {t('wallet.sendButton')}
+                    </Button>
+                }
+                {loadingPayment &&
+                    <div className='flex items-center justify-center gap-2 text-xs text-gray-500'>
+                        <Spinner size="s"/>
+                        <span>{loadingPayment}</span>
+                    </div>
+                }
                 { sendError &&
-                    <p className="text-red-500 text-sm italic mt-2">{sendError}</p>
+                    <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{sendError}</p>
                 }
             </div>
         </div>

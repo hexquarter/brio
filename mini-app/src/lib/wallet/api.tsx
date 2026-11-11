@@ -1,135 +1,82 @@
-import { hash } from "@/helpers/crypto"
+import { retrieveRawInitData } from '@telegram-apps/sdk-react'
 
-export const rpcEndpoint = () => {
-    return import.meta.env.DEV ? 'http://localhost:3000' : import.meta.env.VITE_BACKEND_ENDPOINT
+export const rpcEndpoint = () =>
+    import.meta.env.DEV ? 'http://localhost:3000' : import.meta.env.VITE_BACKEND_ENDPOINT
+
+type VerifyProfileParams = {
+    nostrPublicKey: string
+    profileEventId: string
+    tgInitData: string
 }
 
-type RegisterParams = {
-    tapRootAddress: string
-    publicKey: string
-    breezBtcAddress: string 
-    breezLnUrl: string
-    tgInitData: string,
-    hashedPhoneNumber?: string
+export type BotInfo = {
+    username: string
 }
 
-export const webHookUrl = (userId: number) => {
-    return new URL(`/webhook/${userId}`, rpcEndpoint()).toString()
-}
-
-export const registerUser = async (params: RegisterParams) => {
-    return await fetch(new URL("/rpc", rpcEndpoint()), {
+const rpc = (operation: string, payload: Record<string, unknown>) =>
+    fetch(new URL('/rpc', rpcEndpoint()), {
         method: 'POST',
         headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
         },
-        body: JSON.stringify({
-            operation: 'create-user',
-            payload: {
-                tapRootAddress: params.tapRootAddress,
-                publicKey: params.publicKey,
-                breezBtcAddress: params.breezBtcAddress,
-                breezLnUrl: params.breezLnUrl,
-                tgInitData: params.tgInitData,
-                hashedPhoneNumber: params.hashedPhoneNumber
-            }
-        })
+        body: JSON.stringify({ operation, payload })
     })
+
+export const normalizeContact = (contact: string) => {
+    const value = contact.trim().replace(/\s+/g, '')
+    if (value.startsWith('@')) return value.slice(1).toLowerCase()
+    if (/^\+?\d+$/.test(value)) return value.startsWith('+') ? value : `+${value}`
+    return value.toLowerCase()
 }
 
-export const fetchLightningAddress = async (contact: string) => {
-    const hashedContact = await hash(contact)
-    return await fetch(new URL("/rpc", rpcEndpoint()), {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        },
-        body: JSON.stringify({
-            operation: 'search-lightning-address',
-            payload: {
-                contact: hashedContact
-            }
-        })
-    })
-}
+export const verifyProfile = (params: VerifyProfileParams) =>
+    rpc('verify-profile', params)
 
-export const registerPayment = async(method: string, paymentId: string, amount: number) => {
-    return await fetch(new URL("/rpc", rpcEndpoint()), {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        },
-        body: JSON.stringify({
-            operation: 'register-payment',
-            payload: {
-                method: method,
-                paymentId: paymentId,
-                amount: amount
-            }
-        })
+export const notifyPayment = async (paymentEventId: string) =>
+    rpc('notify-payment', {
+        paymentEventId,
+        tgInitData: retrieveRawInitData()
     })
-}
 
-export const notifyPayment = async(paymentId: string, contact: string) => {
-    const strippedContact = contact.startsWith('@') ? contact.slice(1, contact.length) : contact
-    const contactDigest = await hash(strippedContact)
-    return await fetch(new URL("/rpc", rpcEndpoint()), {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        },
-        body: JSON.stringify({
-            operation: 'notify-payment',
-            payload: {
-                contactDigest: contactDigest,
-                paymentId: paymentId
-            }
-        })
-    })
-}
+const priceCache = new Map<string, { price: number; fetchedAt: number }>()
+const PRICE_TTL_MS = 15_000
 
-export const fetchPrice = async(currency: string) => {
-    const response = await fetch(new URL("/rpc", rpcEndpoint()), {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        },
-        body: JSON.stringify({
-            operation: 'fetch-price',
-            payload: {
-                currency: currency.toLowerCase()
-            }
-        })
-    })
-    if (response.status == 200) {
-        const { price } = await response.json() as any
-        return price
+export const fetchPrice = async (currency: string) => {
+    const code = currency.toLowerCase()
+    const cached = priceCache.get(code)
+    if (cached && Date.now() - cached.fetchedAt < PRICE_TTL_MS) return cached.price
+
+    const url = new URL('https://api.coingecko.com/api/v3/simple/price')
+    url.searchParams.set('ids', 'bitcoin')
+    url.searchParams.set('vs_currencies', code)
+
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (import.meta.env.VITE_COINGECKO_DEMO_API_KEY) {
+        headers['x-cg-demo-api-key'] = import.meta.env.VITE_COINGECKO_DEMO_API_KEY
     }
 
-    throw new Error(JSON.stringify(await response.json()))
-}
-
-export const fetchBotInfo = async() => {
-    const response = await fetch(new URL("/rpc", rpcEndpoint()), {
-        method: 'POST',
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        },
-        body: JSON.stringify({
-            operation: 'bot-info',
-            payload: {}
-        })
-    })
-    if (response.status == 200) {
-        const botInfo = await response.json() as any
-        return botInfo
+    const response = await fetch(url, { headers })
+    if (!response.ok) {
+        throw new Error(`Unable to fetch the Bitcoin price (${response.status}).`)
     }
 
+    const body = await response.json() as { bitcoin?: Record<string, number> }
+    const price = body.bitcoin?.[code]
+    if (typeof price !== 'number') {
+        throw new Error(`No Bitcoin price is available for ${currency}.`)
+    }
+
+    priceCache.set(code, { price, fetchedAt: Date.now() })
+    return price
+}
+
+export const fetchBotInfo = async (): Promise<BotInfo> => {
+    if (import.meta.env.VITE_TELEGRAM_BOT_USERNAME) {
+        return { username: import.meta.env.VITE_TELEGRAM_BOT_USERNAME }
+    }
+
+    const response = await rpc('bot-info', {})
+    if (response.ok) return response.json() as Promise<BotInfo>
     throw new Error(JSON.stringify(await response.json()))
 }

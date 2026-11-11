@@ -5,21 +5,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { convertBtcToSats, convertSatsToBtc, formatBtcAmount, formatFiatAmount } from "@/helpers/number"
-import { fetchBotInfo, fetchLightningAddress, fetchPrice, notifyPayment } from "@/lib/wallet/api"
+import { fetchBotInfo, fetchPrice, normalizeContact, notifyPayment } from "@/lib/wallet/api"
 import { Spinner } from "@telegram-apps/telegram-ui"
-import { useWallet } from '@/lib/wallet/context.tsx';
+import { getSessionMnemonic, useWallet } from '@/lib/wallet/context.tsx';
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { parse, PrepareLnurlPayResponse, SdkEvent } from "@breeztech/breez-sdk-spark/web"
+import { PrepareLnurlPayResponse, SdkEvent } from "@breeztech/breez-sdk-spark/web"
 import { toast } from "sonner"
 import { openTelegramLink, retrieveLaunchParams } from "@telegram-apps/sdk-react"
 import { addContact, listContacts, removeContact } from "@/lib/wallet/contact"
 import { SearchContactForm } from "./TelegramSearchContact"
+import { lookupProfile, publishPayment } from "@/lib/nostr/client"
+import { hash } from "@/helpers/crypto"
+import { haptics, hasMainButton, useMainButton } from "@/lib/telegram/ui"
 export const TelegramSendForm = () => {
     const navigate = useNavigate()
     const { breezSdk, currency } = useWallet()
     const [contact, setContact] = useState("")
     const [search, setSearch] = useState("")
     const [address, setAddress] = useState("")
+    const [recipientPubkey, setRecipientPubkey] = useState<string | undefined>(undefined)
     const [fiatAmount, setFiatAmount] = useState<string | number>("")
     const [btcAmount, setBtcAmount] = useState(0)
     const [lookupError, setLookupError] = useState<string | null>(null)
@@ -38,14 +42,14 @@ export const TelegramSendForm = () => {
         setLookupError(null)
         if (search == "" ||  !breezSdk) return
         const delayDebounceFn = setTimeout(async () => {
-            const strippedContact = search.startsWith('@') 
-                ? search.slice(1, search.length) 
+            const strippedContact = search.startsWith('@')
+                ? search.slice(1, search.length)
                 : search
             try {
-                const response = await fetchLightningAddress(strippedContact)
-                if (response.status == 200) {
-                    const { address: lnUrl }  = await response.json()
-                    setAddress(lnUrl)
+                const result = await lookupProfile(strippedContact)
+                if (result) {
+                    setAddress(result.address)
+                    setRecipientPubkey(result.publicKey)
                     const price = await fetchPrice(currency)
                     setPrice(price)
                     setContact(strippedContact.startsWith("+") ? strippedContact : `@${strippedContact}`)
@@ -56,6 +60,7 @@ export const TelegramSendForm = () => {
                 }
 
                 setContact("")
+                setRecipientPubkey(undefined)
                 setLookupError(t('wallet.telegram.notFound'))
             }
             catch(e) {
@@ -77,6 +82,14 @@ export const TelegramSendForm = () => {
 
     let debounceTimeout = useRef<number|undefined>(undefined);
 
+    const parsePayRequest = async (value: string) => {
+        if (!breezSdk) throw new Error('Wallet is not ready')
+        const input = await breezSdk.parse(value)
+        if (input.type == 'lnurlPay') return input
+        if (input.type == 'lightningAddress') return input.payRequest
+        return undefined
+    }
+
     const handleAmountChange = (amount: number) => {
         setSendError(null)
 
@@ -90,7 +103,7 @@ export const TelegramSendForm = () => {
         if (amount == 0) {
             return
         }
-        
+
         const btc = amount / price
         setBtcAmount(btc)
 
@@ -101,16 +114,16 @@ export const TelegramSendForm = () => {
             try {
                 setSendError(null)
                 setLoadingPayment(t('walletSend.fetchingFees'))
-                const input = await parse(address)
-                if (input.type != 'lnurlPay') {
+                const payRequest = await parsePayRequest(address)
+                if (!payRequest) {
                     setLoadingPayment(null)
                     setSendError(t('wallet.invalidAddress'))
                     return
                 }
-               
+
                 const prepareResponse = await breezSdk?.prepareLnurlPay({
-                    amountSats: convertBtcToSats(btc),
-                    payRequest: input,
+                    amount: BigInt(convertBtcToSats(btc)),
+                    payRequest,
                     comment: 'Pay via Brio',
                 })
                 setLoadingPayment(null)
@@ -146,8 +159,8 @@ export const TelegramSendForm = () => {
 
     const drain = async () => {
         setLoadingAll(true)
-        const input = await parse(address)
-        if (input.type != 'lnurlPay') {
+        const payRequest = await parsePayRequest(address)
+        if (!payRequest) {
             setLoadingAll(false)
             setSendError(t('wallet.invalidAddress'))
             return
@@ -155,13 +168,13 @@ export const TelegramSendForm = () => {
 
         try {
             let prepareResponse = await breezSdk?.prepareLnurlPay({
-                amountSats: convertBtcToSats(btcBalance),
-                payRequest: input
+                amount: BigInt(convertBtcToSats(btcBalance)),
+                payRequest
             })
             setLoadingAll(false)
             if (!prepareResponse) {
                 return
-    
+
             }
             const reducedBtc = btcBalance - convertSatsToBtc(prepareResponse.feeSats)
             handleAmountChange(parseFloat(formatFiatAmount(reducedBtc * price, 4)))
@@ -187,9 +200,29 @@ export const TelegramSendForm = () => {
                         case 'paymentSucceeded':
                             if (event.payment.paymentType == 'send' && event.payment.status == 'completed') {
                                 if (event.payment.details?.type == 'lightning') {
-                                    await notifyPayment(event.payment.details.paymentHash, contact)
+                                    try {
+                                        const mnemonic = getSessionMnemonic()
+                                        if (mnemonic) {
+                                            const recipientContact = contact
+                                                ? await hash(normalizeContact(contact))
+                                                : undefined
+                                            const paymentEvent = await publishPayment(mnemonic, {
+                                                paymentId: event.payment.id,
+                                                paymentHash: event.payment.details.htlcDetails.paymentHash,
+                                                amountSats: Number(event.payment.amount),
+                                                method: 'lightning',
+                                                recipientPublicKey: recipientPubkey,
+                                                recipientContact
+                                            })
+                                            if (recipientPubkey || recipientContact) {
+                                                await notifyPayment(paymentEvent.id)
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.error('Unable to publish the payment notification:', error)
+                                    }
                                 }
-                                await addContact(contact)
+                                if (contact) await addContact(contact)
                                 await breezSdk?.removeEventListener(listenerId as string)
                                 await new Promise(r => setTimeout(r, 1000));
                                 setLoadingPayment(null)
@@ -210,7 +243,7 @@ export const TelegramSendForm = () => {
             }
 
             listenerId = await breezSdk?.addEventListener(new EventListener())
-            
+
             await breezSdk?.lnurlPay({
                 prepareResponse: prepareResponse as PrepareLnurlPayResponse
             })
@@ -221,6 +254,24 @@ export const TelegramSendForm = () => {
             setSendError((e as Error).message)
         }
     }
+
+    const applyPreset = (fraction: number) => {
+        if (!price || !btcBalance) return
+        haptics.selection()
+        const amount = parseFloat(formatFiatAmount(btcBalance * price * fraction, 2))
+        handleAmountChange(amount)
+    }
+
+    const canSend = Boolean(address && prepareResponse && !sendError)
+    const nativeButton = hasMainButton()
+
+    useMainButton({
+        text: t('wallet.sendButton'),
+        onClick: () => { void handleSend() },
+        visible: nativeButton && canSend,
+        enabled: nativeButton && canSend && !loadingPayment,
+        loading: Boolean(loadingPayment && prepareResponse)
+    })
 
     const shareInvite = async () => {
         const tgData = retrieveLaunchParams()
@@ -260,10 +311,10 @@ export const TelegramSendForm = () => {
     }
 
     return (
-        <div className='flex flex-col gap-10 pt-10'>
+        <div className='flex flex-col gap-5'>
             <div className='flex flex-col gap-1'>
-                <Label className='text-gray-400 text-xs mb-5'>{t('wallet.telegram.contact')}</Label>
-                <SearchContactForm 
+                <Label className='mb-1 text-xs font-medium text-gray-400'>{t('wallet.telegram.contact')}</Label>
+                <SearchContactForm
                     placeholder={t('wallet.telegram.contact.placeholder')}
                     open={open}
                     handleOpen={handleOpen}
@@ -277,45 +328,83 @@ export const TelegramSendForm = () => {
                 />
             </div>
 
-            { address != '' && price > 0 && !lookupError && 
-                <div>
-                    <div className="flex justify-between">
-                        <Label htmlFor="amount" className='text-gray-400'>{t('wallet.amount')} ({currency})</Label>
-                        <Button variant="outline" className="p-3 rounded-sm h-0 text-xs border-gray-200" onClick={drain}>
-                            All
-                            {loadingAll && <Spinner size="s" />}
-                        </Button>
+            { address != '' && price > 0 && !lookupError &&
+                <div className="app-card flex flex-col gap-3 p-4">
+                    <Label htmlFor="amount" className='text-xs font-medium text-gray-400'>
+                        {t('wallet.amount')} ({currency})
+                    </Label>
+                    <div className="relative">
+                        <Input
+                            id="amount"
+                            type="number"
+                            inputMode="decimal"
+                            min={0.01}
+                            step={0.01}
+                            value={fiatAmount}
+                            onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
+                            className="h-12 border-0 pr-14 text-2xl font-semibold tabular-nums focus-visible:border-0"
+                            />
+                        <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-400">
+                            {currency}
+                        </span>
                     </div>
-                    <Input 
-                        type="number" 
-                        inputMode="decimal"
-                        min={0.01} 
-                        step={0.01} 
-                        value={fiatAmount} 
-                        onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
-                        /> 
-                    {fiatAmount != '' && <small>{formatBtcAmount(btcAmount)}  BTC</small>}
+                    {fiatAmount != '' && (
+                        <small className="text-xs text-gray-400">{formatBtcAmount(btcAmount)} BTC</small>
+                    )}
+                    <div className="flex gap-2">
+                        {[0.25, 0.5, 0.75].map(fraction => (
+                            <button
+                                key={fraction}
+                                type="button"
+                                onClick={() => applyPreset(fraction)}
+                                className="flex-1 rounded-xl bg-gray-100 py-2 text-xs font-medium text-gray-600 transition-colors active:bg-gray-200"
+                            >
+                                {fraction * 100}%
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => { haptics.selection(); void drain() }}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-gray-100 py-2 text-xs font-medium text-gray-600 transition-colors active:bg-gray-200"
+                        >
+                            {t('wallet.send.all')}
+                            {loadingAll && <Spinner size="s" />}
+                        </button>
+                    </div>
                 </div>
             }
-            {address != '' && !lookupError && 
-                <div className="flex flex-col items-center">
-                    {!loadingPayment &&
-                        <div className="text-center flex flex-col gap-2 items-center">
-                            {!sendError && <Button className="w-40" onClick={() => handleSend()}>{t('wallet.sendButton')}</Button>}
-                            {fees > 0 && 
-                                <div>
-                                    <p className="text-xs">{t('fees')}: {formatBtcAmount(convertSatsToBtc(fees))} BTC / {formatFiatAmount(convertSatsToBtc(fees) * price)} {currency}</p>
-                                    <p className="text-xs">{t('remaining')} : {formatBtcAmount(remaining)} BTC / {formatFiatAmount(remaining * price)} {currency}</p>
-                                </div>
-                            }
-                        </div>}
-                    {loadingPayment && 
-                            <div className='flex flex-col items-center gap-2'>
-                                <Spinner size="s"/>
-                                <p className="text-xs">{loadingPayment}</p>
-                            </div>}
+            {address != '' && !lookupError &&
+                <div className="flex flex-col gap-3">
+                    {fees > 0 && !sendError &&
+                        <div className="app-card flex flex-col gap-2 p-4 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">{t('fees')}</span>
+                                <span className="tabular-nums">{formatBtcAmount(convertSatsToBtc(fees))} BTC</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">{t('remaining')}</span>
+                                <span className="tabular-nums">{formatBtcAmount(remaining)} BTC</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-gray-400">
+                                <span />
+                                <span>{formatFiatAmount(remaining * price)} {currency}</span>
+                            </div>
+                        </div>
+                    }
+                    {!nativeButton && !sendError && canSend &&
+                        <Button className="w-full" disabled={!!loadingPayment} onClick={() => void handleSend()}>
+                            {loadingPayment && <Spinner size="s" />}
+                            {t('wallet.sendButton')}
+                        </Button>
+                    }
+                    {loadingPayment &&
+                        <div className='flex items-center justify-center gap-2 text-xs text-gray-500'>
+                            <Spinner size="s"/>
+                            <span>{loadingPayment}</span>
+                        </div>
+                    }
                     { sendError &&
-                        <p className="text-red-500 text-sm italic mt-2">{sendError}</p>
+                        <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{sendError}</p>
                     }
                 </div>
             }

@@ -1,120 +1,177 @@
-// import { t } from 'i18next';
 import { useWallet } from '@/lib/wallet/context';
 import { shortenAddress } from '@/lib/wallet/utils';
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LuCopy } from 'react-icons/lu';
 import { toast } from 'sonner';
 import { Payment } from '@breeztech/breez-sdk-spark/web';
 import { convertSatsToBtc, formatBtcAmount, formatFiatAmount } from '@/helpers/number';
 import { fetchPrice } from '@/lib/wallet/api';
+import { haptics } from '@/lib/telegram/ui';
+import { cn } from '@/lib/utils';
+
+const DetailRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div className="flex items-start justify-between gap-4 py-3">
+        <span className="shrink-0 text-sm text-gray-400">{label}</span>
+        <span className="min-w-0 text-right text-sm">{children}</span>
+    </div>
+)
+
+const CopyButton = ({ value }: { value: string }) => {
+    const { t } = useTranslation()
+
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(value)
+            haptics.success()
+            const toastId = toast.info(t('walletActivity.copyToast'))
+            setTimeout(() => toast.dismiss(toastId), 2000)
+        } catch (reason) {
+            haptics.error()
+            toast.error(reason instanceof Error ? reason.message : String(reason))
+        }
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={() => void copy()}
+            aria-label={t('walletActivity.copyToast')}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors active:bg-gray-100 active:text-primary"
+        >
+            <LuCopy className="h-4 w-4" />
+        </button>
+    )
+}
 
 export const WalletActivityDetailsPage : React.FC = () => {
     const {t} = useTranslation()
     const {id} = useParams()
     const { breezSdk, currency} = useWallet()
-    const navigate = useNavigate()
 
     const [payment, setPayment] = useState<undefined | Payment>(undefined)
     const [price, setPrice] = useState(0)
+    const [loading, setLoading] = useState(true)
 
     useEffect(() => {
+        let cancelled = false
+
         const loadPayment = async () => {
-            const paymentResponse = await breezSdk?.getPayment({ paymentId: id as string })
-            const price = await fetchPrice(currency)
-            setPayment(paymentResponse?.payment)
-            setPrice(price)
+            try {
+                const [paymentResponse, price] = await Promise.all([
+                    breezSdk?.getPayment({ paymentId: id as string }),
+                    fetchPrice(currency).catch(() => 0)
+                ])
+                if (cancelled) return
+                setPayment(paymentResponse?.payment)
+                setPrice(price)
+            } finally {
+                if (!cancelled) setLoading(false)
+            }
         }
 
-        loadPayment()
-    }, [breezSdk])
+        void loadPayment()
 
-    const copy = async (data: string) => {
-        await navigator.clipboard.writeText(data)
-        const toastId = toast.info(t('walletActivity.copyToast'))
-        setTimeout(() => {
-            toast.dismiss(toastId)
-        }, 2000)
-    }
+        return () => { cancelled = true }
+    }, [breezSdk, id, currency])
+
+    const isSend = payment?.paymentType === 'send'
+    const details = payment?.details
+    const amount = payment ? convertSatsToBtc(Number(payment.amount)) : 0
 
     return (
-        <div className="flex flex-col gap-10">
-            <div className='flex gap-2 items-center'>
-                <ArrowLeft onClick={() => navigate('/app/wallet/activity')} />
-                <h3 className="text-2xl font-medium">{t('walletActivity.title')}</h3>
-            </div>
-            { payment &&
-                <div className='flex flex-col gap-5 h-full text-left bg-white p-5 rounded-sm'>
-                    <div className='flex justify-between'>
-                        <span>
-                            { payment.paymentType == 'send' && <span>{t('walletActivity.spendBtcTitle')}</span>}
-                            { payment.paymentType == 'receive' && <span>{t('walletActivity.receiveBtcTitle')}</span>}
+        <div className="flex flex-col gap-5">
+            <h2 className="text-2xl font-semibold">{t('walletActivity.title')}</h2>
+
+            {loading && (
+                <div className="app-card h-40 animate-pulse bg-white/70" />
+            )}
+
+            {!loading && !payment && (
+                <div className="app-card p-6 text-center text-sm text-gray-500">
+                    {t('walletActivity.notFound')}
+                </div>
+            )}
+
+            {payment && (
+                <>
+                    <div className="app-card flex flex-col items-center gap-2 px-5 py-8 text-center">
+                        <span className={cn(
+                            'flex h-12 w-12 items-center justify-center rounded-full text-xl font-semibold',
+                            isSend ? 'bg-orange-100 text-primary' : 'bg-green-100 text-green-700'
+                        )}>
+                            {isSend ? '↑' : '↓'}
                         </span>
-                        <Badge variant={payment.status == 'completed' ? 'default' : payment.status == 'failed' ? 'destructive' : 'warning'}>
+                        <p className="mt-1 text-sm text-gray-500">
+                            {isSend ? t('walletActivity.spendBtcTitle') : t('walletActivity.receiveBtcTitle')}
+                        </p>
+                        <p className={cn(
+                            'text-3xl font-semibold tabular-nums',
+                            isSend ? 'text-gray-900' : 'text-green-700'
+                        )}>
+                            {isSend ? '-' : '+'}{formatBtcAmount(amount)} BTC
+                        </p>
+                        {price > 0 && (
+                            <p className="text-sm text-gray-500">
+                                {isSend ? '-' : '+'}{formatFiatAmount(amount * price)} {currency}
+                            </p>
+                        )}
+                        <Badge
+                            className="mt-2"
+                            variant={payment.status === 'completed' ? 'default' : payment.status === 'failed' ? 'destructive' : 'warning'}
+                        >
                             {t(`walletActivity.status.${payment.status}`)}
                         </Badge>
                     </div>
-                    
-                    <div className='flex flex-col gap-2'>
-                        {payment.details?.type == 'deposit' &&
+
+                    <div className="app-card divide-y divide-black/5 px-4">
+                        {details?.type === 'deposit' && (
+                            <DetailRow label={t('walletActivity.transaction')}>
+                                <span className="inline-flex items-center gap-1">
+                                    <span className="font-mono text-xs">{shortenAddress(details.txId as string)}</span>
+                                    <CopyButton value={details.txId as string} />
+                                </span>
+                            </DetailRow>
+                        )}
+
+                        {details?.type === 'lightning' && (
                             <>
-                                <div className='flex justify-between'>
-                                    <span className='text-gray-400'>{t('walletActivity.transaction')}</span>
-                                    <span className='flex gap-2'>
-                                        {shortenAddress(payment.details.txId as string)}
-                                        <div className="active:text-primary"><LuCopy className='w-5 h-5' onClick={() => copy((payment.details as any).txId as string)} /></div>
+                                <DetailRow label={t('walletActivity.publicKey')}>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="font-mono text-xs">{shortenAddress(details.destinationPubkey as string)}</span>
+                                        <CopyButton value={details.destinationPubkey as string} />
                                     </span>
-                                </div>
+                                </DetailRow>
+                                <DetailRow label={t('walletActivity.invoice')}>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="font-mono text-xs">{shortenAddress(details.invoice as string)}</span>
+                                        <CopyButton value={details.invoice as string} />
+                                    </span>
+                                </DetailRow>
                             </>
-                        }
-                    
-                        {payment.details?.type == 'lightning' &&
-                            <div className='flex justify-between'>
-                                <span className='text-gray-400'>{t('walletActivity.publicKey')}</span>
-                                <span className='flex gap-2'>
-                                    {shortenAddress(payment.details.destinationPubkey as string)}
-                                    <div className="active:text-primary"><LuCopy className='w-5 h-5' onClick={() => copy((payment.details as any).destinationPubkey as string)} /></div>
+                        )}
+
+                        {isSend && (
+                            <DetailRow label={t('fees')}>
+                                <span className="tabular-nums">
+                                    {formatBtcAmount(convertSatsToBtc(Number(payment.fees)))} BTC
+                                    {price > 0 && (
+                                        <span className="block text-xs text-gray-400">
+                                            {formatFiatAmount(convertSatsToBtc(Number(payment.fees)) * price)} {currency}
+                                        </span>
+                                    )}
                                 </span>
-                            </div>
-                        }
-                        {payment.details?.type == 'lightning' && 
-                            <div className='flex justify-between'>
-                                <span className='text-gray-400'>{t('walletActivity.invoice')}</span>
-                                <span className='flex gap-2'>
-                                    {shortenAddress(payment.details.invoice as string)}
-                                    <div className="active:text-primary"><LuCopy className='w-5 h-5' onClick={() => copy((payment.details as any).invoice as string)} /></div>
-                                </span>
-                            </div>
-                        }
-                        { payment.paymentType == 'send' &&
-                        <div className='flex justify-between'>
-                            <span className='text-gray-400'>{t('fees')}</span>
-                            <span className='items-center'>
-                                {formatBtcAmount(convertSatsToBtc(payment.fees))} BTC 
-                                { price > 0 &&
-                                    <span className='text-xs'> / {formatFiatAmount(convertSatsToBtc(payment.fees) * price)} {currency}</span>
-                                }
-                            </span>
-                        </div>}
-                        <div className='flex justify-between'>
-                            <span className='text-gray-400'>{t('walletActivity.date')}</span>
-                            <span>{new Date(payment.timestamp * 1000).toLocaleString()}</span>
-                        </div>
-                            <div className='flex justify-between'>
-                            <span className='text-gray-400'>{t('walletActivity.amount')}</span>
-                            <div className={`flex flex-col gap-1 ${payment.paymentType == 'send' ? 'text-red-600' : 'text-green-600'}`}>
-                                <span>{payment.paymentType == 'send' ? '-' : '+'}{formatBtcAmount(convertSatsToBtc(payment.amount))} BTC</span>
-                                { price > 0 &&
-                                    <span>{payment.paymentType == 'send' ? '-' : '+'}{formatFiatAmount(convertSatsToBtc(payment.amount) * price)} {currency}</span>
-                                }
-                            </div>
-                        </div>
+                            </DetailRow>
+                        )}
+
+                        <DetailRow label={t('walletActivity.date')}>
+                            <span className="text-gray-700">{new Date(payment.timestamp * 1000).toLocaleString()}</span>
+                        </DetailRow>
                     </div>
-                </div>
-            }
+                </>
+            )}
         </div>
     )
 }

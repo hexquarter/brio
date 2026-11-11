@@ -1,11 +1,18 @@
 import {
   setDebug,
   mountBackButton,
+  mountMainButton,
+  mountSwipeBehavior,
+  disableVerticalSwipes,
   restoreInitData,
   init as initSDK,
   bindThemeParamsCssVars,
   mountViewport,
   bindViewportCssVars,
+  expandViewport,
+  setMiniAppBackgroundColor,
+  setMiniAppBottomBarColor,
+  setMiniAppHeaderColor,
   mockTelegramEnv,
   type ThemeParams,
   themeParamsState,
@@ -61,14 +68,33 @@ export async function init(options: {
 
   // Mount all components used in the project.
   mountBackButton.ifAvailable();
+  mountMainButton.ifAvailable();
+  mountSwipeBehavior.ifAvailable();
+  disableVerticalSwipes.ifAvailable();
   restoreInitData();
   
   if (miniApp.mountSync.isAvailable()) {
     miniApp.mountSync();
     bindThemeParamsCssVars();
+    // Use explicit RGB values: theme key names are unavailable when Telegram
+    // sends partial theme params, and a failed lookup aborts initialization.
+    try {
+      if (setMiniAppHeaderColor.isAvailable()) setMiniAppHeaderColor('#f5f5f6');
+      if (setMiniAppBackgroundColor.isAvailable()) setMiniAppBackgroundColor('#f5f5f6');
+      if (setMiniAppBottomBarColor.isAvailable()) setMiniAppBottomBarColor('#f5f5f6');
+    } catch (error) {
+      console.warn('Unable to apply Telegram chrome colors:', error);
+    }
   }
 
-  mountViewport.isAvailable() && mountViewport().then(() => {
-    bindViewportCssVars();
-  });
+  if (mountViewport.isAvailable()) {
+    // Never block the first render on Telegram's viewport handshake: some
+    // clients (and the development mock) may not answer the request.
+    void mountViewport()
+      .then(() => {
+        bindViewportCssVars();
+        expandViewport.ifAvailable();
+      })
+      .catch(error => console.warn('Unable to mount the Telegram viewport:', error));
+  }
 }

@@ -4,54 +4,40 @@ import { useTranslation } from "react-i18next";
 
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { storeSessionMnemonic } from '@/lib/wallet/context';
-import { LuCopy } from "react-icons/lu";
-import { toast } from "sonner";
+import { ShieldAlert } from 'lucide-react';
+import { haptics } from "@/lib/telegram/ui";
 
 export function CreateWalletPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();   
 
-    const [mnemonic, setMnemonic] = useState<string[]>([]);
-
     useEffect(() => {
         const generatedMnemonic = bip39.generateMnemonic(wordlist);
-        setMnemonic(generatedMnemonic.split(' '));
-        // Store in sessionStorage for safe transmission between pages (cleartext for now)
         storeSessionMnemonic(generatedMnemonic)
     }, []);
 
-    const copy = async () => {
-        await navigator.clipboard.writeText(mnemonic.join(' '))
-        const toastId = toast.info(t('walletBackup.copyToast'))
-        setTimeout(() => {
-            toast.dismiss(toastId)
-        }, 2000)
-    } 
+    const next = () => {
+        haptics.impact()
+        navigate('/app/nowallet/secure-wallet')
+    }
 
     return (
         <Page back={true}>
-            <div className="flex flex-col gap-10">
-                <div className='flex flex-col gap-5'>
-                    <div className="flex flex-col gap-10">
-                        <h2 className='text-4xl'>{t('walletCreate.title')}</h2>
-                        <p>{t('walletCreate.description')}</p>
-                    </div>
+            <div className="mx-auto flex w-full max-w-md flex-col gap-6 py-2">
+                <div className="flex flex-col gap-2">
+                    <h2 className="text-2xl font-semibold">{t('walletCreate.title')}</h2>
+                    <p className="text-sm text-gray-500">{t('walletCreate.description')}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                    {mnemonic.map((word, index) => (
-                        <div key={index} className="border-2 border-primary text-primary rounded  p-2">{word}</div>
-                    ))}
+
+                <div className="app-card flex items-start gap-3 border-amber-200 bg-amber-50 p-4" role="alert">
+                    <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                    <p className="text-sm text-amber-900">{t('walletCreate.warning')}</p>
                 </div>
-                <div className="active:text-primary"><LuCopy className='w-5 h-5' onClick={() => copy()} /></div>
-                <div className="bg-orange-100 text-black-700 p-5 rounded" role="alert">
-                    {t('walletCreate.warning')}
-                </div>
-                <div className="flex justify-center">
-                    <Button onClick={() => navigate('/app/nowallet/secure-wallet')}>{t('walletCreate.nextButton')}</Button>
-                </div>
+
+                <Button className="w-full" onClick={next}>{t('walletCreate.nextButton')}</Button>
             </div>
         </Page>
     );

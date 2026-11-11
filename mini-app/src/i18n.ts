@@ -32,4 +32,13 @@ i18n
     }
   });
 
+// Keep the document language in sync so screen readers and the browser pick
+// the right pronunciation rules after an in-app language switch.
+const syncDocumentLanguage = (language: string) => {
+  document.documentElement.lang = language.split('-')[0]
+}
+
+i18n.on('languageChanged', syncDocumentLanguage)
+i18n.on('initialized', () => syncDocumentLanguage(i18n.language))
+
 export default i18n;

@@ -1,7 +1,7 @@
-import React, {useEffect, useState} from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FiEye, FiSettings } from 'react-icons/fi';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { FiEye, FiEyeOff } from 'react-icons/fi';
+import { haptics } from '@/lib/telegram/ui';
 
 interface WalletBalanceProps {
     btcBalance: number
@@ -10,45 +10,43 @@ interface WalletBalanceProps {
 }
 
 export const WalletBalance: React.FC<WalletBalanceProps> = ({ btcBalance, fiatBalance, currency }) => {
-   const { t } = useTranslation();
-   const location = useLocation()
-    
-    const navigate = useNavigate()
-    const [hideSettings, setHideSettings] = useState(false)
-
-    useEffect(() => {
-      if (location.pathname.includes('/wallet/settings')) {
-         setHideSettings(true)
-      } else {
-         setHideSettings(false)
-      }
-    }, [location])
-
+    const { t } = useTranslation();
     const [visibleBalance, setVisibleBalance] = useState(true)
+
+    const toggleVisibility = () => {
+        haptics.impact()
+        setVisibleBalance(value => !value)
+    }
+
+    const fiat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(fiatBalance)
+    const btc = new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(btcBalance)
+
     return (
-        <div className="flex flex-col">
-           <div className='flex gap-5 mb-3'>
-               <p className='text-gray-400'>{t('wallet.totalBalance')}</p>
-               <div className='flex gap-4 items-center'>
-                  <FiEye className='text-gray-400' onClick={() => setVisibleBalance(!visibleBalance)}/>
-                  {!hideSettings && <FiSettings className='text-gray-400' onClick={() => navigate('/app/wallet/settings')}/>}
-               </div>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#FF942C] to-[#F97316] p-5 text-white shadow-sm">
+            <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/10" />
+            <div className="absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-black/5" />
+
+            <div className="relative flex items-center justify-between">
+                <span className="text-sm font-medium text-white/80">{t('wallet.totalBalance')}</span>
+                <button
+                    type="button"
+                    onClick={toggleVisibility}
+                    aria-label={visibleBalance ? t('wallet.hideBalance') : t('wallet.showBalance')}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition-colors active:bg-white/25"
+                >
+                    {visibleBalance ? <FiEye className="h-4 w-4" /> : <FiEyeOff className="h-4 w-4" />}
+                </button>
             </div>
-           <div className='flex gap-5'>
-               <div className="flex gap-2 items-center">
-                  <span className="text-2xl font-medium">
-                     {visibleBalance ? new Intl.NumberFormat("en", {maximumFractionDigits: 4}).format(fiatBalance) : '****'}
-                  </span>
-                  <span className='text-gray-500 text-2xl'>{ currency }</span>
-               </div>
-               <div className="w-1 border-r-3 border-primary mt-2 mb-2"></div>
-               <div className="flex gap-2 items-center">
-                  <span className="text-2xl font-medium">
-                     {visibleBalance ? new Intl.NumberFormat("en", {maximumFractionDigits: 8}).format(btcBalance) : '****'}
-                  </span>
-                  <span className='text-gray-500 text-2xl'>BTC</span>
-               </div>
-           </div>
+
+            <div className="relative mt-4 flex items-baseline gap-2">
+                <span className="text-4xl font-semibold tabular-nums tracking-tight">
+                    {visibleBalance ? fiat : '••••'}
+                </span>
+                <span className="text-lg font-medium text-white/80">{currency}</span>
+            </div>
+            <div className="relative mt-1 text-sm tabular-nums text-white/80">
+                {visibleBalance ? `${btc} BTC` : '•••• BTC'}
+            </div>
         </div>
     )
 };
