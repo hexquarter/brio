@@ -29,6 +29,7 @@ export function SecureWalletPage() {
         : telegramVaultUnavailableReason() ?? passkeyUnavailableReason();
 
     async function secureWallet() {
+        let step = 'preparing'
         try {
             setError(null)
             haptics.impact()
@@ -38,13 +39,16 @@ export function SecureWalletPage() {
             if (!mnemonic) throw new Error('Wallet recovery phrase is missing. Return to setup and try again.')
 
             if (!wallet.walletExists) {
+                step = 'saving wallet'
                 await wallet.storeWallet(mnemonic)
             }
+            step = 'loading wallet'
             const sdk = await wallet.loadSdk(mnemonic)
             if (!sdk) {
                 throw new Error("Cannot load the Breez SDK.")
             }
 
+            step = 'deriving address'
             const childKey = await generateChildKey(mnemonic)
             if (!childKey.publicKey) {
                 throw new Error('Cannot retrieve Bitcoin public key.')
@@ -59,6 +63,7 @@ export function SecureWalletPage() {
 
             setProgressLabel(t('walletSecure.progress66'))
             setProgressValue(66)
+            step = 'registering Lightning address'
             const registerLightningAddressRequest = { username: tapRootAddress }
             const available = await sdk.checkLightningAddressAvailable(registerLightningAddressRequest)
             const info = available
@@ -68,11 +73,13 @@ export function SecureWalletPage() {
                 throw new Error(t('walletSecure.noLightningAddressGenerated'))
             }
 
+            step = 'retrieving Bitcoin address'
             const btcAddress = await wallet.getBtcAddress(sdk)
             if (!btcAddress) {
                 throw new Error('Cannot retrieve Bitcoin address.')
             }
 
+            step = 'publishing profile'
             await publishAndVerifyProfile(mnemonic, sdk, btcAddress)
 
             setProgressValue(100)
@@ -80,9 +87,10 @@ export function SecureWalletPage() {
             haptics.success()
         }
         catch (e) {
-            console.error(e)
+            console.error(`Failed while ${step}:`, e)
             haptics.error()
-            setError(e instanceof Error ? e.message : String(e))
+            const message = e instanceof Error ? e.message : String(e)
+            setError(`Failed while ${step}: ${message}`)
             setProgressValue(0)
             setProgressLabel("")
         }

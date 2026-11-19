@@ -3,7 +3,7 @@
  *
  * Telegram's WebViews do not expose WebAuthn, so a passkey-sealed vault cannot
  * be opened inside a Mini App. Bot API 9.0+ provides secure storage instead:
- * a per-bot key/value store backed by the iOS Keychain or Android Keystore.
+ * a per-bot key/value store backed by the Telegram client's secure device store.
  *
  * We keep the same defense-in-depth shape as the browser vault: a random
  * AES-GCM key lives in secure storage, and the mnemonic is encrypted with it.
@@ -18,7 +18,7 @@
 import { request, retrieveLaunchParams, supports } from '@telegram-apps/sdk-react'
 import { isMockedTelegramEnv, isTelegramEnvironment } from '@/lib/telegram/env'
 
-type StorageCallback<T> = (error: Error | null, value?: T) => void
+type StorageCallback<T> = (error: Error | string | null, value?: T) => void
 
 type SecureStorageApi = {
     setItem(key: string, value: string, callback?: StorageCallback<boolean>): unknown
@@ -28,6 +28,7 @@ type SecureStorageApi = {
 
 type TelegramWebApp = {
     SecureStorage?: SecureStorageApi
+    isVersionAtLeast?: (version: string) => boolean
 }
 
 type TelegramWindow = Window & {
@@ -79,19 +80,6 @@ const telegramVersion = () => {
     }
 }
 
-// SecureStorage is backed by the iOS Keychain and Android Keystore. Other
-// Telegram clients may report Bot API 9.0+ but still reject storage with
-// `UNSUPPORTED`, so only offer this path where the OS store exists.
-const telegramPlatform = () => {
-    try {
-        return retrieveLaunchParams().tgWebAppPlatform
-    } catch {
-        return null
-    }
-}
-
-const hasSecureStoragePlatform = () => ['ios', 'android'].includes(telegramPlatform() ?? '')
-
 const bridgeSupported = () => {
     try {
         const version = telegramVersion()
@@ -102,17 +90,29 @@ const bridgeSupported = () => {
 }
 
 const SECURE_STORAGE_UNAVAILABLE =
-    "Secure storage isn't available in this Telegram client. Open Brio on mobile Telegram or in a browser."
+    "Secure storage isn't available in this Telegram client. Update Telegram or open Brio in a browser."
 
 const friendlyStorageError = (message: string) =>
     /unsupported/i.test(message) ? SECURE_STORAGE_UNAVAILABLE : message
 
 /** True when the current client can store the wallet outside WebAuthn. */
+const directStorageSupported = () => {
+    const storage = directStorage()
+    if (!storage) return false
+    try {
+        const webApp = (window as TelegramWindow).Telegram?.WebApp
+        return webApp?.isVersionAtLeast
+            ? webApp.isVersionAtLeast('9.0')
+            : bridgeSupported()
+    } catch {
+        return false
+    }
+}
+
 export const isTelegramVaultAvailable = () =>
     isTelegramEnvironment()
     && !isMockedTelegramEnv()
-    && hasSecureStoragePlatform()
-    && (bridgeSupported() || directStorage() !== null)
+    && (bridgeSupported() || directStorageSupported())
 
 /**
  * Explains why a Telegram client cannot store the wallet, so the UI can point
@@ -139,10 +139,16 @@ type LooseRequest = (
 // the bridge still validates method/event names at runtime.
 const send = request as unknown as LooseRequest
 
-const newRequestId = () =>
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+// Telegram's own web-app script uses a 16-character alphanumeric request id.
+// Match that format exactly rather than sending a UUID.
+const newRequestId = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let id = ''
+    for (let i = 0; i < 16; i += 1) {
+        id += chars[Math.floor(Math.random() * chars.length)]
+    }
+    return id
+}
 
 const bridgeRequest = async (
     method: string,
@@ -197,15 +203,19 @@ const bridgeSet = async (key: string, value: string | null) => {
 const call = <T>(operation: (callback: StorageCallback<T>) => void): Promise<T | undefined> =>
     new Promise((resolve, reject) => {
         let settled = false
-        const finish = (error: Error | null, value?: T) => {
+        const finish = (error: Error | string | null, value?: T) => {
             if (settled) return
             settled = true
             window.clearTimeout(timer)
-            if (error) reject(error)
-            else resolve(value)
+            if (error) {
+                const message = error instanceof Error ? error.message : error
+                reject(new Error(friendlyStorageError(message)))
+            } else {
+                resolve(value)
+            }
         }
         const timer = window.setTimeout(
-            () => finish(new Error('Telegram secure storage did not respond.')),
+            () => finish(new Error('Secure storage did not respond. Reopen Brio and try again, or use a browser with a passkey.')),
             CALL_TIMEOUT_MS
         )
 
@@ -217,9 +227,9 @@ const call = <T>(operation: (callback: StorageCallback<T>) => void): Promise<T |
     })
 
 const requireTransport = () => {
-    // Prefer the documented high-level API: iOS injects it directly and its
-    // callbacks are more reliable than the low-level bridge events.
-    if (directStorage()) return 'direct' as const
+    // Telegram's own web-app script implements request ids, response routing,
+    // and each client's native transport (including Telegram Desktop).
+    if (directStorageSupported()) return 'direct' as const
     if (bridgeSupported()) return 'bridge' as const
     throw new Error(SECURE_STORAGE_UNAVAILABLE)
 }

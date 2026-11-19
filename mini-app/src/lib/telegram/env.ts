@@ -30,15 +30,12 @@ export const isTelegramEnvironment = () => {
         if (href.includes('tgWebAppData=') || href.includes('tgWebAppVersion=')) {
             return true
         }
-        const global = window as Window & {
-            TelegramWebviewProxy?: unknown
-            Telegram?: { WebApp?: unknown; WebView?: unknown }
-        }
-        return !!(
-            global.TelegramWebviewProxy
-            || global.Telegram?.WebApp
-            || global.Telegram?.WebView
-        )
+        // Telegram's official web-app script creates Telegram.WebApp and
+        // Telegram.WebView on every page, including plain browsers, so those
+        // globals cannot identify a real Mini App. TelegramWebviewProxy is
+        // injected only by native Telegram clients.
+        const global = window as Window & { TelegramWebviewProxy?: unknown }
+        return !!global.TelegramWebviewProxy
     } catch {
         return false
     }
