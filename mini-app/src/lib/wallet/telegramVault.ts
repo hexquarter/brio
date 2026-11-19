@@ -79,6 +79,19 @@ const telegramVersion = () => {
     }
 }
 
+// SecureStorage is backed by the iOS Keychain and Android Keystore. Other
+// Telegram clients may report Bot API 9.0+ but still reject storage with
+// `UNSUPPORTED`, so only offer this path where the OS store exists.
+const telegramPlatform = () => {
+    try {
+        return retrieveLaunchParams().tgWebAppPlatform
+    } catch {
+        return null
+    }
+}
+
+const hasSecureStoragePlatform = () => ['ios', 'android'].includes(telegramPlatform() ?? '')
+
 const bridgeSupported = () => {
     try {
         const version = telegramVersion()
@@ -88,21 +101,28 @@ const bridgeSupported = () => {
     }
 }
 
+const SECURE_STORAGE_UNAVAILABLE =
+    "Secure storage isn't available in this Telegram client. Open Brio on mobile Telegram or in a browser."
+
+const friendlyStorageError = (message: string) =>
+    /unsupported/i.test(message) ? SECURE_STORAGE_UNAVAILABLE : message
+
 /** True when the current client can store the wallet outside WebAuthn. */
 export const isTelegramVaultAvailable = () =>
     isTelegramEnvironment()
     && !isMockedTelegramEnv()
+    && hasSecureStoragePlatform()
     && (bridgeSupported() || directStorage() !== null)
 
 /**
  * Explains why a Telegram client cannot store the wallet, so the UI can point
- * users to an update or to recovery-phrase restore instead of a WebAuthn error.
+ * users to a supported client or to recovery-phrase restore instead of a
+ * WebAuthn error.
  */
 export const telegramVaultUnavailableReason = (): string | null => {
     if (isTelegramVaultAvailable() || isMockedTelegramEnv()) return null
     if (!isTelegramEnvironment()) return null
-    const version = telegramVersion()
-    return `This Telegram client${version ? ` (${version})` : ''} does not support secure wallet storage. Update Telegram to the latest version, open Brio in Safari or Chrome to use a passkey, or restore your wallet with your recovery phrase.`
+    return SECURE_STORAGE_UNAVAILABLE
 }
 
 type LooseRequest = (
@@ -127,7 +147,7 @@ const bridgeRequest = async (
         ? raw as unknown as BridgeResult
         : { event: 'payload', payload: raw as BridgeResult['payload'] }
     if (result.event === 'secure_storage_failed' || result.payload?.error) {
-        throw new Error(result.payload?.error || 'Telegram secure storage failed.')
+        throw new Error(friendlyStorageError(result.payload?.error || 'Telegram secure storage failed.'))
     }
     return result
 }
@@ -174,7 +194,7 @@ const call = <T>(operation: (callback: StorageCallback<T>) => void): Promise<T |
 const requireTransport = () => {
     if (bridgeSupported()) return 'bridge' as const
     if (directStorage()) return 'direct' as const
-    throw new Error('Telegram secure storage is not available in this browser.')
+    throw new Error(SECURE_STORAGE_UNAVAILABLE)
 }
 
 const getItem = async (key: string) => {
