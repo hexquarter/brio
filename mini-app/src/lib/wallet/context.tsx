@@ -15,6 +15,15 @@ import { t } from 'i18next';
 import { generateChildKey, generateTapRootAddress } from '@/helpers/crypto';
 import { isSupportedCurrency } from '@/lib/wallet/api';
 import { openWallet, sealWallet } from '@/lib/wallet/passkey';
+import {
+    clearTelegramVault,
+    hasTelegramVault,
+    hasTelegramVaultBackup,
+    isTelegramVaultAvailable,
+    openTelegramVault,
+    recoverTelegramVault,
+    sealWalletForTelegram
+} from '@/lib/wallet/telegramVault';
 import { clearSecureExport } from '@/lib/wallet/backup';
 import { clearContacts } from '@/lib/wallet/contact';
 import { clearNostrIdentity } from '@/lib/nostr/identity';
@@ -108,6 +117,14 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     const readVaultBackup = () => localStorage.getItem(WALLET_BACKUP_KEY)
 
     const checkWallet = async () => {
+        // Telegram's WebView cannot use WebAuthn. Prefer its native secure
+        // storage when the client exposes it, including for wallets created
+        // after a reset where only the backup remains.
+        if (isTelegramVaultAvailable() && await hasTelegramVault()) {
+            setWalletExists(true)
+            return true
+        }
+
         const vault = localStorage.getItem(WALLET_KEY)
         if (!vault) {
             const legacyWallet = sessionStorage.getItem(LEGACY_WALLET_KEY)
@@ -125,16 +142,24 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         return true
     }
 
-    const hasPasskeyBackup = async () => !!readVaultBackup()
+    const hasPasskeyBackup = async () =>
+        (isTelegramVaultAvailable() && await hasTelegramVaultBackup())
+        || !!readVaultBackup()
 
     const recoverWalletWithPasskey = async () => {
-        const vault = readVaultBackup()
-        if (!vault) {
-            throw new Error('No passkey backup was found on this device.')
+        let mnemonic: string
+
+        if (isTelegramVaultAvailable() && await hasTelegramVaultBackup()) {
+            mnemonic = await recoverTelegramVault()
+        } else {
+            const vault = readVaultBackup()
+            if (!vault) {
+                throw new Error('No wallet backup was found on this device.')
+            }
+            mnemonic = await openWallet(vault)
+            localStorage.setItem(WALLET_KEY, vault)
         }
 
-        const mnemonic = await openWallet(vault)
-        localStorage.setItem(WALLET_KEY, vault)
         storeSessionMnemonic(mnemonic)
         setWalletExists(true)
         const sdk = await loadSdk(mnemonic)
@@ -148,9 +173,14 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
             return
         }
 
-        const vault = localStorage.getItem(WALLET_KEY)
-        const legacyWallet = sessionStorage.getItem(LEGACY_WALLET_KEY)
-        const mnemonic = vault ? await openWallet(vault) : legacyWallet
+        let mnemonic: string | null
+        if (isTelegramVaultAvailable() && await hasTelegramVault()) {
+            mnemonic = await openTelegramVault()
+        } else {
+            const vault = localStorage.getItem(WALLET_KEY)
+            const legacyWallet = sessionStorage.getItem(LEGACY_WALLET_KEY)
+            mnemonic = vault ? await openWallet(vault) : legacyWallet
+        }
         if (!mnemonic) throw new Error('No wallet is available to unlock.')
         storeSessionMnemonic(mnemonic)
         const sdk = await loadSdk(mnemonic)
@@ -163,6 +193,7 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     }, [])
 
     const resetWallet = async (options?: { deleteBackup?: boolean }) => {
+        await clearTelegramVault(options)
         localStorage.removeItem(WALLET_KEY)
         sessionStorage.removeItem(LEGACY_WALLET_KEY)
         sessionStorage.removeItem(WALLET_LN_URL)
@@ -208,15 +239,19 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     }
 
     const storeWallet = async (mnemonic: string) => {
-        const vault = await sealWallet(mnemonic)
-        localStorage.setItem(WALLET_KEY, vault)
+        if (isTelegramVaultAvailable()) {
+            await sealWalletForTelegram(mnemonic)
+        } else {
+            const vault = await sealWallet(mnemonic)
+            localStorage.setItem(WALLET_KEY, vault)
+            rememberVaultBackup(vault)
+        }
         sessionStorage.removeItem(LEGACY_WALLET_KEY)
         sessionStorage.removeItem(WALLET_LN_URL)
         sessionStorage.removeItem(WALLET_BTC_ADDRESS)
         clearProfileSynced()
         clearContacts()
         clearSecureExport()
-        rememberVaultBackup(vault)
         storeSessionMnemonic(mnemonic)
         setLnUrl(null)
         setBtcAddress(null)

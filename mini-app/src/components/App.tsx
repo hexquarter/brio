@@ -4,6 +4,7 @@ import { AppRoot, Spinner } from '@telegram-apps/telegram-ui';
 import { useTranslation } from 'react-i18next';
 import { useWallet } from '@/lib/wallet/context';
 import { passkeyUnavailableReason } from '@/lib/wallet/passkey';
+import { isTelegramVaultAvailable, telegramVaultUnavailableReason } from '@/lib/wallet/telegramVault';
 import { Button } from '@/components/ui/button';
 import { Fingerprint } from 'lucide-react';
 import { haptics } from '@/lib/telegram/ui';
@@ -31,7 +32,12 @@ function WalletRoute({ children }: PropsWithChildren<{}>) {
   const [gate, setGate] = useState<WalletGate>('checking')
   const [exists, setExists] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const passkeyIssue = passkeyUnavailableReason()
+  // Telegram WebViews cannot use WebAuthn, but Bot API 9.0+ clients provide
+  // SecureStorage, which handles the vault without a passkey prompt.
+  const usingTelegramVault = isTelegramVaultAvailable()
+  const passkeyIssue = usingTelegramVault
+    ? null
+    : telegramVaultUnavailableReason() ?? passkeyUnavailableReason()
 
   useEffect(() => {
     let cancelled = false
@@ -100,7 +106,9 @@ function WalletRoute({ children }: PropsWithChildren<{}>) {
           <Fingerprint className="h-8 w-8" />
         </span>
         <h2 className="text-2xl font-semibold">{t('walletUnlock.title')}</h2>
-        <p className="text-sm text-gray-500">{t('walletUnlock.description')}</p>
+        <p className="text-sm text-gray-500">
+          {t(usingTelegramVault ? 'walletUnlock.telegramDescription' : 'walletUnlock.description')}
+        </p>
       </div>
 
       {passkeyIssue && (

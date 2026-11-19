@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "@/lib/wallet/context";
+import { isTelegramVaultAvailable } from "@/lib/wallet/telegramVault";
 import { Fingerprint, KeyRound, ShieldCheck } from "lucide-react";
 import { haptics } from "@/lib/telegram/ui";
 
@@ -13,6 +14,7 @@ export function OnBoardingPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const wallet = useWallet();
+    const usingTelegramVault = isTelegramVaultAvailable();
 
     const [hasPasskeyBackup, setHasPasskeyBackup] = useState(false);
     const [recovering, setRecovering] = useState(false);
@@ -58,7 +60,9 @@ export function OnBoardingPage() {
                         <ShieldCheck className="h-8 w-8" />
                     </span>
                     <h1 className="text-2xl font-semibold">{t('main.nowalletTitle')}</h1>
-                    <p className="text-sm text-gray-500">{t('main.nowalletDescription_1')}</p>
+                    <p className="text-sm text-gray-500">
+                        {t(usingTelegramVault ? 'main.nowalletDescription_1_telegram' : 'main.nowalletDescription_1')}
+                    </p>
                 </div>
 
                 <div className="app-card divide-y divide-black/5">
@@ -66,13 +70,17 @@ export function OnBoardingPage() {
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-primary">
                             <Fingerprint className="h-4 w-4" />
                         </span>
-                        <p className="text-sm text-gray-600">{t('main.nowalletDescription_2')}</p>
+                        <p className="text-sm text-gray-600">
+                            {t(usingTelegramVault ? 'main.nowalletDescription_2_telegram' : 'main.nowalletDescription_2')}
+                        </p>
                     </div>
                     <div className="flex items-start gap-3 p-4">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700">
                             <KeyRound className="h-4 w-4" />
                         </span>
-                        <p className="text-sm text-gray-600">{t('main.nowalletDescription_3')}</p>
+                        <p className="text-sm text-gray-600">
+                            {t(usingTelegramVault ? 'main.nowalletDescription_3_telegram' : 'main.nowalletDescription_3')}
+                        </p>
                     </div>
                 </div>
 
@@ -93,7 +101,9 @@ export function OnBoardingPage() {
                             onClick={() => void recoverWithPasskey()}
                         >
                             {recovering && <Spinner size="s" />}
-                            {recovering ? t('walletSetup.passkeyRecovering') : t('walletSetup.passkeyRecoverButton')}
+                            {recovering
+                                ? t('walletSetup.passkeyRecovering')
+                                : t(usingTelegramVault ? 'walletSetup.telegramRecoverButton' : 'walletSetup.passkeyRecoverButton')}
                         </Button>
                     )}
                 </div>

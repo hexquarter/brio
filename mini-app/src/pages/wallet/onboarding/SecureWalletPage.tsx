@@ -11,6 +11,7 @@ import { generateChildKey, generateTapRootAddress } from "@/helpers/crypto";
 import { useNavigate } from "react-router-dom";
 import { publishAndVerifyProfile } from "@/lib/nostr/profile";
 import { passkeyUnavailableReason } from "@/lib/wallet/passkey";
+import { isTelegramVaultAvailable, telegramVaultUnavailableReason } from "@/lib/wallet/telegramVault";
 import { ShieldCheck } from "lucide-react";
 import { haptics } from "@/lib/telegram/ui";
 
@@ -22,14 +23,17 @@ export function SecureWalletPage() {
     const [progressLabel, setProgressLabel] = useState("")
 
     const [error, setError] = useState<string | null>(null);
-    const passkeyIssue = passkeyUnavailableReason();
+    const usingTelegramVault = isTelegramVaultAvailable();
+    const passkeyIssue = usingTelegramVault
+        ? null
+        : telegramVaultUnavailableReason() ?? passkeyUnavailableReason();
 
     async function secureWallet() {
         try {
             setError(null)
             haptics.impact()
             setProgressValue(1)
-            setProgressLabel(t('walletSecure.progress1'))
+            setProgressLabel(t(usingTelegramVault ? 'walletSecure.telegramProgress1' : 'walletSecure.progress1'))
             const mnemonic = getSessionMnemonic()
             if (!mnemonic) throw new Error('Wallet recovery phrase is missing. Return to setup and try again.')
 
@@ -94,6 +98,11 @@ export function SecureWalletPage() {
                     <h2 className="text-2xl font-semibold">{t('walletSecure.title')}</h2>
                 </div>
 
+                {usingTelegramVault && (
+                    <p className="rounded-xl bg-orange-50 p-3 text-sm text-orange-700">
+                        {t('walletSecure.telegramNotice')}
+                    </p>
+                )}
                 {passkeyIssue && (
                     <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{passkeyIssue}</p>
                 )}
@@ -104,7 +113,7 @@ export function SecureWalletPage() {
                 <div className="app-card flex flex-col gap-4 p-5">
                     {progressValue === 0 && (
                         <Button type="button" className="w-full" disabled={!!passkeyIssue} onClick={() => void secureWallet()}>
-                            {t('walletSecure.registerButton')}
+                            {t(usingTelegramVault ? 'walletSecure.telegramRegisterButton' : 'walletSecure.registerButton')}
                         </Button>
                     )}
                     {progressValue > 0 && (

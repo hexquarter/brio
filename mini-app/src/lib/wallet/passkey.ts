@@ -87,11 +87,11 @@ const describeWebAuthnError = (error: unknown): Error => {
         case 'NotAllowedError':
             return withCause(
                 'The passkey prompt was dismissed, timed out, or blocked by this browser. '
-                + 'Keep the window focused and use a browser with a platform authenticator '
-                + '(Touch ID, Windows Hello, or a security key). WebAuthn also requires '
-                + 'HTTPS — run npm run dev:https for local development. Embedded previews, '
-                + 'webviews, and iframes usually cannot use passkeys, so open the app in '
-                + 'Safari or Chrome.',
+                + 'Keep this window focused and try again. Passkeys need a browser with a '
+                + 'platform authenticator (Touch ID, Windows Hello, or a security key). '
+                + 'Embedded previews and webviews usually cannot use them: if you are in '
+                + 'Telegram, open Brio in Safari or Chrome, or restore your wallet with '
+                + 'your recovery phrase.',
                 error
             )
         case 'SecurityError':

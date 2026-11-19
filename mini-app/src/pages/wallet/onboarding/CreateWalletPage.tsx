@@ -7,12 +7,14 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { storeSessionMnemonic } from '@/lib/wallet/context';
+import { isTelegramVaultAvailable } from '@/lib/wallet/telegramVault';
 import { ShieldAlert } from 'lucide-react';
 import { haptics } from "@/lib/telegram/ui";
 
 export function CreateWalletPage() {
     const { t } = useTranslation();
-    const navigate = useNavigate();   
+    const navigate = useNavigate();
+    const usingTelegramVault = isTelegramVaultAvailable();
 
     useEffect(() => {
         const generatedMnemonic = bip39.generateMnemonic(wordlist);
@@ -29,7 +31,9 @@ export function CreateWalletPage() {
             <div className="mx-auto flex w-full max-w-md flex-col gap-6 py-2">
                 <div className="flex flex-col gap-2">
                     <h2 className="text-2xl font-semibold">{t('walletCreate.title')}</h2>
-                    <p className="text-sm text-gray-500">{t('walletCreate.description')}</p>
+                    <p className="text-sm text-gray-500">
+                        {t(usingTelegramVault ? 'walletCreate.telegramDescription' : 'walletCreate.description')}
+                    </p>
                 </div>
 
                 <div className="app-card flex items-start gap-3 border-amber-200 bg-amber-50 p-4" role="alert">
