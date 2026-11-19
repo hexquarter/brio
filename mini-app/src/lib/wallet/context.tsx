@@ -12,6 +12,8 @@ import {
 } from '@breeztech/breez-sdk-spark/web'
 import { toast } from 'sonner';
 import { t } from 'i18next';
+import { generateChildKey, generateTapRootAddress } from '@/helpers/crypto';
+import { isSupportedCurrency } from '@/lib/wallet/api';
 import { openWallet, sealWallet } from '@/lib/wallet/passkey';
 import { clearSecureExport } from '@/lib/wallet/backup';
 import { clearContacts } from '@/lib/wallet/contact';
@@ -94,7 +96,10 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     const [breezSdk, setBreezSdk] = useState<BreezSdk | undefined>(undefined);
     const [lnUrl, setLnUrl] = useState<string | null>(null)
     const [btcAddress, setBtcAddress] = useState<string | null>(null)
-    const [currency, setCurrency] = useState(sessionStorage.getItem(WALLET_CURRENCY)?.toUpperCase() || 'USD')
+    const [currency, setCurrency] = useState(() => {
+        const stored = sessionStorage.getItem(WALLET_CURRENCY)?.toUpperCase()
+        return stored && isSupportedCurrency(stored) ? stored : 'USD'
+    })
 
     const rememberVaultBackup = (vault: string) => {
         localStorage.setItem(WALLET_BACKUP_KEY, vault)
@@ -185,8 +190,10 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     }
 
     const changeCurrency = async (value: string) => {
-        sessionStorage.setItem(WALLET_CURRENCY, value)
-        setCurrency(value)
+        const next = value.toUpperCase()
+        if (!isSupportedCurrency(next)) return
+        sessionStorage.setItem(WALLET_CURRENCY, next)
+        setCurrency(next)
     }
 
     const loadSdk = async (mnemonic: string) => {
@@ -216,6 +223,48 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         setWalletExists(true)
     }
 
+    // Wallets created before Lightning address registration (or restored
+    // without the onboarding step) may not have one yet. Register the same
+    // deterministic username used during onboarding so Receive always works.
+    const resolveLightningAddress = async (breezSdk: BreezSdk) => {
+        // The SDK can take a moment to load a previously registered address
+        // after connecting. Avoid replacing it with a new one too eagerly.
+        let current = await breezSdk.getLightningAddress()
+        for (let attempt = 0; !current?.lnurl?.url && attempt < 2; attempt++) {
+            await new Promise<void>(resolve => setTimeout(resolve, 300))
+            current = await breezSdk.getLightningAddress()
+        }
+        if (current?.lnurl?.url) {
+            return current
+        }
+
+        const mnemonic = getSessionMnemonic()
+        if (!mnemonic) {
+            return current ?? null
+        }
+
+        try {
+            const childKey = await generateChildKey(mnemonic)
+            if (!childKey.publicKey) {
+                return current ?? null
+            }
+            const tapRootAddress = await generateTapRootAddress(childKey.publicKey)
+            if (!tapRootAddress) {
+                return current ?? null
+            }
+
+            const request = { username: tapRootAddress }
+            const available = await breezSdk.checkLightningAddressAvailable(request)
+            if (available) {
+                return await breezSdk.registerLightningAddress(request)
+            }
+            return (await breezSdk.getLightningAddress()) ?? current ?? null
+        } catch (error) {
+            console.warn('Unable to register the Lightning address:', error)
+            return current ?? null
+        }
+    }
+
     const getLnUrl = async (breezSdk: BreezSdk) => {
         if (lnUrl) {
             return lnUrl
@@ -229,11 +278,12 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
             return cachedLnUrl
         }
 
-        const info = await breezSdk?.getLightningAddress()
-        if (info) {
-            setLnUrl(info.lnurl.url)
-            sessionStorage.setItem(WALLET_LN_URL, info.lnurl.url)
-            return info.lnurl.url
+        const info = await resolveLightningAddress(breezSdk)
+        const address = info?.lnurl?.url ?? info?.lightningAddress
+        if (address) {
+            setLnUrl(address)
+            sessionStorage.setItem(WALLET_LN_URL, address)
+            return address
         }
         return null
     }
@@ -267,6 +317,9 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         }
 
         try {
+            // Make sure the profile can publish its Lightning address, even
+            // for wallets that predate registration during onboarding.
+            await resolveLightningAddress(sdk)
             const address = await getBtcAddress(sdk)
             if (!address) {
                 return

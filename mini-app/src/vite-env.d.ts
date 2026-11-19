@@ -9,7 +9,6 @@ interface ImportMetaEnv {
     readonly VITE_WEBAUTHN_RP_NAME?: string
     readonly VITE_WEBAUTHN_PRF_SALT?: string
     readonly VITE_TELEGRAM_BOT_USERNAME?: string
-    readonly VITE_COINGECKO_DEMO_API_KEY?: string
 }
 
 interface ImportMeta {
