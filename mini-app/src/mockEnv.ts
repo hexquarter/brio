@@ -1,15 +1,10 @@
-import { emitEvent, isTMA, mockTelegramEnv } from '@telegram-apps/sdk-react';
-import { setMockedTelegramEnv } from '@/lib/telegram/env';
+import { emitEvent, mockTelegramEnv } from '@telegram-apps/sdk-react';
+import { isTelegramEnvironment, setMockedTelegramEnv } from '@/lib/telegram/env';
 
 // The app also runs as a plain website. When Telegram launch parameters are
 // absent, install a synthetic environment so the SDK helpers do not throw.
 // A flag records that this is a web session, which disables native-only UI.
-let inTelegram = false;
-try {
-  inTelegram = await isTMA('complete');
-} catch {
-  inTelegram = false;
-}
+const inTelegram = isTelegramEnvironment();
 
 setMockedTelegramEnv(!inTelegram);
 

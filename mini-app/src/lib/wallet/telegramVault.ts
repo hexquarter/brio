@@ -2,16 +2,21 @@
  * Wallet storage for Telegram Mini Apps.
  *
  * Telegram's WebViews do not expose WebAuthn, so a passkey-sealed vault cannot
- * be opened inside a Mini App. Bot API 9.0+ provides `SecureStorage` instead:
+ * be opened inside a Mini App. Bot API 9.0+ provides secure storage instead:
  * a per-bot key/value store backed by the iOS Keychain or Android Keystore.
  *
  * We keep the same defense-in-depth shape as the browser vault: a random
- * AES-GCM key lives in SecureStorage, and the mnemonic is encrypted with it.
- * Both the key and the encrypted vault are stored in SecureStorage, which is
- * encrypted at rest by the platform and inaccessible to other apps.
+ * AES-GCM key lives in secure storage, and the mnemonic is encrypted with it.
+ * Both the key and the encrypted vault are stored there, encrypted at rest by
+ * the platform and inaccessible to other apps.
+ *
+ * Two transports are supported: the SDK bridge methods (available whenever
+ * the client advertises version 9.0+) and the direct `Telegram.WebApp`
+ * SecureStorage object some clients expose.
  */
 
-import { isMockedTelegramEnv } from '@/lib/telegram/env'
+import { request, retrieveLaunchParams, supports } from '@telegram-apps/sdk-react'
+import { isMockedTelegramEnv, isTelegramEnvironment } from '@/lib/telegram/env'
 
 type StorageCallback<T> = (error: Error | null, value?: T) => void
 
@@ -35,6 +40,11 @@ type TelegramVault = {
     ciphertext: string
 }
 
+type BridgeResult = {
+    event: string
+    payload?: { value?: string | null; error?: string }
+}
+
 const VAULT_KEY = 'brio_wallet_vault'
 const BACKUP_KEY = 'brio_wallet_vault_backup'
 const ENCRYPTION_KEY = 'brio_wallet_encryption_key'
@@ -46,7 +56,7 @@ const encode = (value: Uint8Array) =>
 const decode = (value: string) =>
     Uint8Array.from(atob(value), character => character.charCodeAt(0))
 
-const secureStorage = (): SecureStorageApi | null => {
+const directStorage = (): SecureStorageApi | null => {
     try {
         const storage = (window as TelegramWindow).Telegram?.WebApp?.SecureStorage
         if (!storage
@@ -61,8 +71,28 @@ const secureStorage = (): SecureStorageApi | null => {
     }
 }
 
-/** True when the current client exposes Telegram's native SecureStorage. */
-export const isTelegramVaultAvailable = () => secureStorage() !== null
+const telegramVersion = () => {
+    try {
+        return retrieveLaunchParams().tgWebAppVersion
+    } catch {
+        return null
+    }
+}
+
+const bridgeSupported = () => {
+    try {
+        const version = telegramVersion()
+        return !!version && supports('web_app_secure_storage_get_key', version)
+    } catch {
+        return false
+    }
+}
+
+/** True when the current client can store the wallet outside WebAuthn. */
+export const isTelegramVaultAvailable = () =>
+    isTelegramEnvironment()
+    && !isMockedTelegramEnv()
+    && (bridgeSupported() || directStorage() !== null)
 
 /**
  * Explains why a Telegram client cannot store the wallet, so the UI can point
@@ -70,12 +100,53 @@ export const isTelegramVaultAvailable = () => secureStorage() !== null
  */
 export const telegramVaultUnavailableReason = (): string | null => {
     if (isTelegramVaultAvailable() || isMockedTelegramEnv()) return null
-    try {
-        if (!(window as TelegramWindow).Telegram?.WebApp) return null
-    } catch {
-        return null
+    if (!isTelegramEnvironment()) return null
+    const version = telegramVersion()
+    return `This Telegram client${version ? ` (${version})` : ''} does not support secure wallet storage. Update Telegram to the latest version, open Brio in Safari or Chrome to use a passkey, or restore your wallet with your recovery phrase.`
+}
+
+type LooseRequest = (
+    method: string,
+    events: string[],
+    options: { params?: object; timeout?: number }
+) => Promise<unknown>
+
+// The SDK's typed overloads cannot express a different event set per method;
+// the bridge still validates method/event names at runtime.
+const send = request as unknown as LooseRequest
+
+const bridgeRequest = async (
+    method: string,
+    events: string[],
+    params?: object
+): Promise<BridgeResult> => {
+    const raw = await send(method, events, { params, timeout: CALL_TIMEOUT_MS }) as Record<string, unknown>
+    // Depending on the SDK version, a multi-event request resolves either to
+    // { event, payload } or directly to the captured event payload.
+    const result: BridgeResult = typeof raw.event === 'string'
+        ? raw as unknown as BridgeResult
+        : { event: 'payload', payload: raw as BridgeResult['payload'] }
+    if (result.event === 'secure_storage_failed' || result.payload?.error) {
+        throw new Error(result.payload?.error || 'Telegram secure storage failed.')
     }
-    return 'This Telegram version does not support secure wallet storage. Update Telegram to the latest version, open Brio in Safari or Chrome to use a passkey, or restore your wallet with your recovery phrase.'
+    return result
+}
+
+const bridgeGet = async (key: string) => {
+    const result = await bridgeRequest(
+        'web_app_secure_storage_get_key',
+        ['secure_storage_key_received', 'secure_storage_failed'],
+        { key }
+    )
+    return result.payload?.value ?? null
+}
+
+const bridgeSet = async (key: string, value: string | null) => {
+    await bridgeRequest(
+        'web_app_secure_storage_save_key',
+        ['secure_storage_key_saved', 'secure_storage_failed'],
+        { key, value }
+    )
 }
 
 const call = <T>(operation: (callback: StorageCallback<T>) => void): Promise<T | undefined> =>
@@ -100,16 +171,17 @@ const call = <T>(operation: (callback: StorageCallback<T>) => void): Promise<T |
         }
     })
 
-const requireStorage = (): SecureStorageApi => {
-    const storage = secureStorage()
-    if (!storage) {
-        throw new Error('Telegram secure storage is not available in this browser.')
-    }
-    return storage
+const requireTransport = () => {
+    if (bridgeSupported()) return 'bridge' as const
+    if (directStorage()) return 'direct' as const
+    throw new Error('Telegram secure storage is not available in this browser.')
 }
 
 const getItem = async (key: string) => {
-    const storage = requireStorage()
+    const transport = requireTransport()
+    if (transport === 'bridge') return bridgeGet(key)
+
+    const storage = directStorage()!
     const value = await call<string | null>(callback =>
         storage.getItem(key, (error, result) => callback(error, result ?? null))
     )
@@ -117,7 +189,13 @@ const getItem = async (key: string) => {
 }
 
 const setItem = async (key: string, value: string) => {
-    const storage = requireStorage()
+    const transport = requireTransport()
+    if (transport === 'bridge') {
+        await bridgeSet(key, value)
+        return
+    }
+
+    const storage = directStorage()!
     const stored = await call<boolean>(callback => storage.setItem(key, value, callback))
     if (stored === false) {
         throw new Error(`Telegram secure storage rejected ${key}.`)
@@ -125,7 +203,13 @@ const setItem = async (key: string, value: string) => {
 }
 
 const removeItem = async (key: string) => {
-    const storage = requireStorage()
+    const transport = requireTransport()
+    if (transport === 'bridge') {
+        await bridgeSet(key, null)
+        return
+    }
+
+    const storage = directStorage()!
     await call<boolean>(callback => storage.removeItem(key, callback))
 }
 
@@ -172,10 +256,10 @@ const readVault = async (key: string): Promise<string | null> => {
 
 /**
  * Encrypts the mnemonic and stores the key, active vault, and backup in
- * Telegram SecureStorage. Mirrors `storeWallet` for passkey browsers.
+ * Telegram secure storage. Mirrors `storeWallet` for passkey browsers.
  */
 export const sealWalletForTelegram = async (mnemonic: string): Promise<void> => {
-    requireStorage()
+    requireTransport()
 
     const cryptoKey = await crypto.subtle.generateKey(
         { name: 'AES-GCM', length: 256 },
@@ -196,8 +280,7 @@ export const sealWalletForTelegram = async (mnemonic: string): Promise<void> => 
     const serialized = JSON.stringify(vault)
 
     // Store the key first so an interrupted write can never leave a vault
-    // without its key. The wallet is only considered ready once all writes
-    // succeed.
+    // without its key. The wallet is only ready once all writes succeed.
     await setItem(ENCRYPTION_KEY, await exportKey(cryptoKey))
     await setItem(VAULT_KEY, serialized)
     await setItem(BACKUP_KEY, serialized)
