@@ -5,12 +5,12 @@ import { ArrowDownLeft, ArrowUpRight, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { deferSecureExport, hasSecureExport, isSecureExportDeferred } from '@/lib/wallet/backup';
 import { haptics } from '@/lib/telegram/ui';
-import { isTelegramVaultAvailable } from '@/lib/wallet/telegramVault';
+import { telegramVaultMode } from '@/lib/wallet/telegramVault';
 
 export const WalletWelcomePage : React.FC = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const usingTelegramVault = isTelegramVaultAvailable();
+    const vaultMode = telegramVaultMode();
     const [showExportTip, setShowExportTip] = useState(
         () => !hasSecureExport() && !isSecureExportDeferred()
     );
@@ -72,7 +72,11 @@ export const WalletWelcomePage : React.FC = () => {
                         <div className="min-w-0 flex-1">
                             <h3 className="font-medium text-amber-900">{t('main.secureExportTitle')}</h3>
                             <p className="mt-1 text-sm text-amber-800">
-                                {t(usingTelegramVault ? 'main.secureExportTelegramDescription' : 'main.secureExportDescription')}
+                                {t(vaultMode === 'password'
+                                    ? 'main.secureExportPasswordDescription'
+                                    : vaultMode === 'secure'
+                                        ? 'main.secureExportTelegramDescription'
+                                        : 'main.secureExportDescription')}
                             </p>
                         </div>
                     </div>

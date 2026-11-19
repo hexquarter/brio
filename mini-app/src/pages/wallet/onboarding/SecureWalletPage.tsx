@@ -11,7 +11,12 @@ import { generateChildKey, generateTapRootAddress } from "@/helpers/crypto";
 import { useNavigate } from "react-router-dom";
 import { publishAndVerifyProfile } from "@/lib/nostr/profile";
 import { passkeyUnavailableReason } from "@/lib/wallet/passkey";
-import { isTelegramVaultAvailable, telegramVaultUnavailableReason } from "@/lib/wallet/telegramVault";
+import {
+    isTelegramVaultAvailable,
+    telegramVaultMode,
+    telegramVaultUnavailableReason,
+    type TelegramVaultMode
+} from "@/lib/wallet/telegramVault";
 import { ShieldCheck } from "lucide-react";
 import { haptics } from "@/lib/telegram/ui";
 
@@ -23,7 +28,12 @@ export function SecureWalletPage() {
     const [progressLabel, setProgressLabel] = useState("")
 
     const [error, setError] = useState<string | null>(null);
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const vaultMode: TelegramVaultMode = telegramVaultMode();
     const usingTelegramVault = isTelegramVaultAvailable();
+    const usingPasswordVault = vaultMode === 'password';
     const passkeyIssue = usingTelegramVault
         ? null
         : telegramVaultUnavailableReason() ?? passkeyUnavailableReason();
@@ -32,15 +42,29 @@ export function SecureWalletPage() {
         let step = 'preparing'
         try {
             setError(null)
+            if (usingPasswordVault) {
+                if (password.length < 8 || password !== confirmPassword) {
+                    haptics.error()
+                    setPasswordError(t(password.length < 8 ? 'walletPassword.tooShort' : 'walletPassword.mismatch'))
+                    return
+                }
+            }
+            setPasswordError(null)
             haptics.impact()
             setProgressValue(1)
-            setProgressLabel(t(usingTelegramVault ? 'walletSecure.telegramProgress1' : 'walletSecure.progress1'))
+            setProgressLabel(t(
+                usingPasswordVault
+                    ? 'walletSecure.passwordProgress1'
+                    : usingTelegramVault
+                        ? 'walletSecure.telegramProgress1'
+                        : 'walletSecure.progress1'
+            ))
             const mnemonic = getSessionMnemonic()
             if (!mnemonic) throw new Error('Wallet recovery phrase is missing. Return to setup and try again.')
 
             if (!wallet.walletExists) {
                 step = 'saving wallet'
-                await wallet.storeWallet(mnemonic)
+                await wallet.storeWallet(mnemonic, { password })
             }
             step = 'loading wallet'
             const sdk = await wallet.loadSdk(mnemonic)
@@ -108,7 +132,7 @@ export function SecureWalletPage() {
 
                 {usingTelegramVault && (
                     <p className="rounded-xl bg-orange-50 p-3 text-sm text-orange-700">
-                        {t('walletSecure.telegramNotice')}
+                        {t(usingPasswordVault ? 'walletSecure.passwordNotice' : 'walletSecure.telegramNotice')}
                     </p>
                 )}
                 {passkeyIssue && (
@@ -119,9 +143,53 @@ export function SecureWalletPage() {
                 )}
 
                 <div className="app-card flex flex-col gap-4 p-5">
+                    {progressValue === 0 && usingPasswordVault && (
+                        <div className="flex flex-col gap-3">
+                            <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium">{t('walletPassword.chooseLabel')}</span>
+                                <input
+                                    type="password"
+                                    className="h-12 w-full rounded-xl bg-gray-50 px-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
+                                    autoComplete="new-password"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    value={password}
+                                    onChange={event => {
+                                        setPassword(event.target.value)
+                                        setPasswordError(null)
+                                    }}
+                                    placeholder={t('walletPassword.choosePlaceholder')}
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium">{t('walletPassword.confirmLabel')}</span>
+                                <input
+                                    type="password"
+                                    className="h-12 w-full rounded-xl bg-gray-50 px-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
+                                    autoComplete="new-password"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    value={confirmPassword}
+                                    onChange={event => {
+                                        setConfirmPassword(event.target.value)
+                                        setPasswordError(null)
+                                    }}
+                                    placeholder={t('walletPassword.confirmPlaceholder')}
+                                />
+                            </label>
+                            <p className="text-xs text-gray-500">{t('walletPassword.setupHint')}</p>
+                            {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+                        </div>
+                    )}
                     {progressValue === 0 && (
                         <Button type="button" className="w-full" disabled={!!passkeyIssue} onClick={() => void secureWallet()}>
-                            {t(usingTelegramVault ? 'walletSecure.telegramRegisterButton' : 'walletSecure.registerButton')}
+                            {t(usingPasswordVault
+                                ? 'walletSecure.passwordRegisterButton'
+                                : usingTelegramVault
+                                    ? 'walletSecure.telegramRegisterButton'
+                                    : 'walletSecure.registerButton')}
                         </Button>
                     )}
                     {progressValue > 0 && (

@@ -12,6 +12,7 @@ import { useWallet } from '@/lib/wallet/context';
 import { FIAT_CURRENCIES } from '@/lib/wallet/api';
 import { hasSecureExport } from '@/lib/wallet/backup';
 import { haptics } from '@/lib/telegram/ui';
+import { isTelegramVaultAvailable } from '@/lib/wallet/telegramVault';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -56,6 +57,7 @@ export const WalletSettingsPage : React.FC = () => {
     const { t, i18n } = useTranslation()
     const { currency, changeCurrency, resetWallet} = useWallet()
     const exportSaved = hasSecureExport()
+    const usingTelegramVault = isTelegramVaultAvailable()
     const currentLanguage = i18n.language.split('-')[0]
 
     const changeLanguage = (code: string) => {
@@ -165,7 +167,7 @@ export const WalletSettingsPage : React.FC = () => {
                         <AlertDialogContent className='border-0'>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>{t('wallet.settings.resetQuestion')}</AlertDialogTitle>
-                                <AlertDialogDescription>{t('wallet.settings.resetWarning')}</AlertDialogDescription>
+                                <AlertDialogDescription>{t(usingTelegramVault ? 'wallet.settings.resetWarningTelegram' : 'wallet.settings.resetWarning')}</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter className='flex flex-row'>
                                 <AlertDialogCancel>{t('wallet.settings.resetCancel')}</AlertDialogCancel>
@@ -184,7 +186,7 @@ export const WalletSettingsPage : React.FC = () => {
                         <AlertDialogContent className='border-0'>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>{t('wallet.settings.resetQuestion')}</AlertDialogTitle>
-                                <AlertDialogDescription>{t('wallet.settings.deleteBackupWarning')}</AlertDialogDescription>
+                                <AlertDialogDescription>{t(usingTelegramVault ? 'wallet.settings.deleteBackupWarningTelegram' : 'wallet.settings.deleteBackupWarning')}</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter className='flex flex-row'>
                                 <AlertDialogCancel>{t('wallet.settings.resetCancel')}</AlertDialogCancel>

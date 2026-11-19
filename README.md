@@ -96,11 +96,15 @@ npm run build
 
 The workflow runs on pushes to `master` and `refactor/nostr`, plus manual runs from the Actions tab. It derives the Vite base path from the repository name, so the app is served correctly at `https://<owner>.github.io/<repo>/` (or at the root for a `<owner>.github.io` repository).
 
-Inside Telegram on mobile or Telegram Desktop, wallets use the native `Telegram.WebApp.SecureStorage` API (Bot API 9.0+, backed by the client's secure device storage) instead of WebAuthn, because Telegram's WebView cannot show a passkey prompt. A random AES-GCM key and the encrypted vault are both kept in SecureStorage; no wallet data is written to browser storage in the Mini App. Wallets created in Safari or Chrome are separate: restore them in Telegram with the recovery phrase. Clients without SecureStorage support are told to update Telegram or use a regular browser.
+Telegram's WebView cannot show a passkey prompt, so wallets created inside Telegram never use WebAuthn. On Telegram mobile (iOS/Android), Brio uses the native `Telegram.WebApp.SecureStorage` API (Bot API 9.0+, backed by the client's secure device store): a random AES-GCM key and the encrypted vault are both kept there, and no wallet data is written to browser storage.
+
+Telegram Desktop does not implement SecureStorage. There Brio asks you to choose a wallet password and stores only an encrypted vault in Telegram `DeviceStorage`. The AES-GCM key is derived from the password with PBKDF2-SHA256 (600,000 iterations); no encryption key is stored on the device. You need the same password to unlock the wallet or recover it after a reset, so keep it safe along with your recovery phrase.
+
+Wallets created in Safari or Chrome are separate: restore them in Telegram with the recovery phrase. Telegram clients that expose neither SecureStorage nor DeviceStorage are told to update Telegram or use a regular browser.
 
 If wallet creation fails with "The operation either timed out or was not allowed" outside Telegram, the browser rejected the WebAuthn request. Use HTTPS (`npm run dev:https`), open the app in Safari or Chrome rather than an embedded preview/webview, keep the window focused, and make sure the device has a platform authenticator (Touch ID, Windows Hello, or a security key). Passkeys also do not work on IP-address origins such as `http://127.0.0.1`; use `http://localhost`.
 
-Resetting a wallet keeps an encrypted copy of the vault on the device. After a reset, **Recover with passkey** (or **Recover this wallet** in Telegram) on the onboarding screen unlocks that copy, so the recovery phrase is not needed. **Delete wallet permanently** in Settings removes the encrypted backup as well. If the encrypted vault has already been deleted, the passkey or device storage alone cannot recreate the wallet; use the recovery phrase instead.
+Resetting a wallet keeps an encrypted copy of the vault on the device. After a reset, **Recover with passkey** in a browser, **Recover this wallet** in Telegram mobile, or **Recover with password** in Telegram Desktop unlocks that copy, so the recovery phrase is not needed. **Delete wallet permanently** in Settings removes the encrypted backup as well. If the encrypted vault has already been deleted, the passkey, device storage, or wallet password alone cannot recreate the wallet; use the recovery phrase instead.
 
 Contacts and the display currency are kept in session storage only. They are never uploaded to Telegram or the backend.
 

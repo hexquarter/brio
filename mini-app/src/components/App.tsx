@@ -4,9 +4,14 @@ import { AppRoot, Spinner } from '@telegram-apps/telegram-ui';
 import { useTranslation } from 'react-i18next';
 import { useWallet } from '@/lib/wallet/context';
 import { passkeyUnavailableReason } from '@/lib/wallet/passkey';
-import { isTelegramVaultAvailable, telegramVaultUnavailableReason } from '@/lib/wallet/telegramVault';
+import {
+    isTelegramVaultAvailable,
+    telegramVaultMode,
+    telegramVaultUnavailableReason,
+    type TelegramVaultMode
+} from '@/lib/wallet/telegramVault';
 import { Button } from '@/components/ui/button';
-import { Fingerprint } from 'lucide-react';
+import { Fingerprint, KeyRound } from 'lucide-react';
 import { haptics } from '@/lib/telegram/ui';
 import { WelcomePage } from '@/pages/WelcomePage';
 import { MainPage } from '@/pages/MainPage';
@@ -32,9 +37,12 @@ function WalletRoute({ children }: PropsWithChildren<{}>) {
   const [gate, setGate] = useState<WalletGate>('checking')
   const [exists, setExists] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Telegram WebViews cannot use WebAuthn, but Bot API 9.0+ clients provide
-  // SecureStorage, which handles the vault without a passkey prompt.
+  const [password, setPassword] = useState('')
+  // Telegram WebViews cannot use WebAuthn. Mobile clients use native
+  // SecureStorage; Desktop uses a password-protected device vault.
+  const vaultMode: TelegramVaultMode = telegramVaultMode()
   const usingTelegramVault = isTelegramVaultAvailable()
+  const usingPasswordVault = vaultMode === 'password'
   const passkeyIssue = usingTelegramVault
     ? null
     : telegramVaultUnavailableReason() ?? passkeyUnavailableReason()
@@ -67,7 +75,7 @@ function WalletRoute({ children }: PropsWithChildren<{}>) {
     setGate('unlocking')
     haptics.impact()
     try {
-      await wallet.unlockWallet()
+      await wallet.unlockWallet({ password })
       haptics.success()
       setGate('unlocked')
     } catch (reason) {
@@ -103,11 +111,17 @@ function WalletRoute({ children }: PropsWithChildren<{}>) {
     <div className="app-shell mx-auto flex w-full max-w-md flex-col justify-center gap-6 px-5 py-10">
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF942C] to-[#F97316] text-white shadow-sm">
-          <Fingerprint className="h-8 w-8" />
+          {usingPasswordVault
+            ? <KeyRound className="h-8 w-8" />
+            : <Fingerprint className="h-8 w-8" />}
         </span>
         <h2 className="text-2xl font-semibold">{t('walletUnlock.title')}</h2>
         <p className="text-sm text-gray-500">
-          {t(usingTelegramVault ? 'walletUnlock.telegramDescription' : 'walletUnlock.description')}
+          {t(usingPasswordVault
+            ? 'walletUnlock.passwordDescription'
+            : usingTelegramVault
+              ? 'walletUnlock.telegramDescription'
+              : 'walletUnlock.description')}
         </p>
       </div>
 
@@ -116,6 +130,29 @@ function WalletRoute({ children }: PropsWithChildren<{}>) {
       )}
       {error && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>
+      )}
+
+      {usingPasswordVault && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">{t('walletPassword.unlockLabel')}</span>
+          <input
+            type="password"
+            className="h-12 w-full rounded-xl bg-gray-50 px-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-primary/30"
+            autoComplete="current-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            value={password}
+            onChange={event => {
+              setPassword(event.target.value)
+              setError(null)
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !passkeyIssue && gate !== 'unlocking') void unlock()
+            }}
+            placeholder={t('walletPassword.unlockPlaceholder')}
+          />
+        </label>
       )}
 
       <div className="flex flex-col gap-3">

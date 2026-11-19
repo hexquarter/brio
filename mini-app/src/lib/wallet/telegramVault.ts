@@ -17,6 +17,7 @@
 
 import { request, retrieveLaunchParams, supports } from '@telegram-apps/sdk-react'
 import { isMockedTelegramEnv, isTelegramEnvironment } from '@/lib/telegram/env'
+import { isTelegramPasswordVaultAvailable } from '@/lib/wallet/telegramDesktopVault'
 
 type StorageCallback<T> = (error: Error | string | null, value?: T) => void
 
@@ -80,6 +81,19 @@ const telegramVersion = () => {
     }
 }
 
+const telegramPlatform = () => {
+    try {
+        return retrieveLaunchParams().tgWebAppPlatform
+    } catch {
+        return null
+    }
+}
+
+// Telegram documents SecureStorage as iOS Keychain / Android Keystore only.
+// Desktop clients advertise Bot API 9.x but reject SecureStorage requests with
+// UNSUPPORTED, so they use the password-protected DeviceStorage vault instead.
+const isMobileTelegram = () => ['ios', 'android'].includes(telegramPlatform() ?? '')
+
 const bridgeSupported = () => {
     try {
         const version = telegramVersion()
@@ -95,7 +109,6 @@ const SECURE_STORAGE_UNAVAILABLE =
 const friendlyStorageError = (message: string) =>
     /unsupported/i.test(message) ? SECURE_STORAGE_UNAVAILABLE : message
 
-/** True when the current client can store the wallet outside WebAuthn. */
 const directStorageSupported = () => {
     const storage = directStorage()
     if (!storage) return false
@@ -109,10 +122,22 @@ const directStorageSupported = () => {
     }
 }
 
-export const isTelegramVaultAvailable = () =>
+/** True when the current client can store the wallet outside WebAuthn. */
+const isTelegramSecureVaultAvailable = () =>
     isTelegramEnvironment()
     && !isMockedTelegramEnv()
+    && isMobileTelegram()
     && (bridgeSupported() || directStorageSupported())
+
+export type TelegramVaultMode = 'secure' | 'password' | null
+
+export const telegramVaultMode = (): TelegramVaultMode => {
+    if (isTelegramSecureVaultAvailable()) return 'secure'
+    if (isTelegramPasswordVaultAvailable()) return 'password'
+    return null
+}
+
+export const isTelegramVaultAvailable = () => telegramVaultMode() !== null
 
 /**
  * Explains why a Telegram client cannot store the wallet, so the UI can point
@@ -363,7 +388,9 @@ export const recoverTelegramVault = async () => {
 }
 
 export const clearTelegramVault = async (options?: { deleteBackup?: boolean }) => {
-    if (!isTelegramVaultAvailable()) return
+    // Desktop advertises a SecureStorage object too, but rejects its methods.
+    // Its password vault is cleared by clearTelegramDesktopVault instead.
+    if (telegramVaultMode() !== 'secure') return
     await removeItem(VAULT_KEY)
     if (options?.deleteBackup) {
         await removeItem(BACKUP_KEY)
