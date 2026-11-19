@@ -11,6 +11,8 @@
  * encrypted at rest by the platform and inaccessible to other apps.
  */
 
+import { isMockedTelegramEnv } from '@/lib/telegram/env'
+
 type StorageCallback<T> = (error: Error | null, value?: T) => void
 
 type SecureStorageApi = {
@@ -67,7 +69,7 @@ export const isTelegramVaultAvailable = () => secureStorage() !== null
  * users to an update or to recovery-phrase restore instead of a WebAuthn error.
  */
 export const telegramVaultUnavailableReason = (): string | null => {
-    if (isTelegramVaultAvailable() || import.meta.env.DEV) return null
+    if (isTelegramVaultAvailable() || isMockedTelegramEnv()) return null
     try {
         if (!(window as TelegramWindow).Telegram?.WebApp) return null
     } catch {

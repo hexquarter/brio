@@ -17,6 +17,7 @@ import { SearchContactForm } from "./TelegramSearchContact"
 import { lookupProfile, publishPayment } from "@/lib/nostr/client"
 import { hash } from "@/helpers/crypto"
 import { haptics, hasMainButton, useMainButton } from "@/lib/telegram/ui"
+import { isMockedTelegramEnv } from "@/lib/telegram/env"
 export const TelegramSendForm = () => {
     const navigate = useNavigate()
     const { breezSdk, currency } = useWallet()
@@ -274,6 +275,10 @@ export const TelegramSendForm = () => {
     })
 
     const shareInvite = async () => {
+        if (isMockedTelegramEnv()) {
+            toast.info('Open Brio from the Telegram bot to share an invitation.')
+            return
+        }
         const tgData = retrieveLaunchParams()
         const startParam = new URLSearchParams()
         startParam.append('referral', tgData.tgWebAppData?.user?.id.toString() as string)

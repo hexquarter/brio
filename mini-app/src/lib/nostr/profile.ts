@@ -4,12 +4,20 @@ import { generateChildKey, generateTapRootAddress, hash } from '@/helpers/crypto
 import { verifyProfile } from '@/lib/wallet/api'
 import { markProfileSynced } from '@/lib/wallet/session'
 import { publishProfile } from './client'
+import { isMockedTelegramEnv } from '@/lib/telegram/env'
 
 export const publishAndVerifyProfile = async (
   mnemonic: string,
   sdk: BreezSdk,
   btcAddress: string
 ) => {
+  // A website session has no real Telegram identity or init data. Publishing
+  // a profile with the synthetic web user would create a bogus Nostr record.
+  if (isMockedTelegramEnv()) {
+    console.info('Skipping Nostr profile sync outside Telegram.')
+    return undefined
+  }
+
   const telegramUsername = retrieveLaunchParams().tgWebAppData?.user?.username
   if (!telegramUsername) {
     throw new Error('A Telegram username is required to be discoverable. Set a username in Telegram and try again.')

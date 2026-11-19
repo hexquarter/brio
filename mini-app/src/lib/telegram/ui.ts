@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { hapticFeedback, mainButton } from '@telegram-apps/sdk-react'
+import { isMockedTelegramEnv } from './env'
 
 type ImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'
 
@@ -53,7 +54,7 @@ export function useMainButton({
   handler.current = onClick
 
   useEffect(() => {
-    if (!mainButton.setParams.isAvailable()) return
+    if (isMockedTelegramEnv() || !mainButton.setParams.isAvailable()) return
     mainButton.setParams({
       text,
       isVisible: visible,
@@ -63,7 +64,7 @@ export function useMainButton({
   }, [text, visible, enabled, loading])
 
   useEffect(() => {
-    if (!mainButton.onClick.isAvailable()) return
+    if (isMockedTelegramEnv() || !mainButton.onClick.isAvailable()) return
     const off = mainButton.onClick(() => handler.current())
     return () => {
       off()
@@ -76,4 +77,4 @@ export function useMainButton({
 
 /** True when Telegram renders a native Main Button for this client. */
 export const hasMainButton = () =>
-  !import.meta.env.DEV && mainButton.setParams.isAvailable()
+  !import.meta.env.DEV && !isMockedTelegramEnv() && mainButton.setParams.isAvailable()
