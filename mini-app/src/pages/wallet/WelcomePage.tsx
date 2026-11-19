@@ -73,7 +73,7 @@ export const WalletWelcomePage : React.FC = () => {
                         </div>
                     </div>
                     <div className="mt-4 flex flex-col gap-2">
-                        <Button size="sm" onClick={() => go('/app/wallet/backup')}>
+                        <Button size="lg" onClick={() => go('/app/wallet/backup')}>
                             {t('main.secureExportButton')}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={defer}>

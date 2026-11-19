@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select"
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/lib/wallet/context';
+import { FIAT_CURRENCIES } from '@/lib/wallet/api';
 import { hasSecureExport } from '@/lib/wallet/backup';
 import { haptics } from '@/lib/telegram/ui';
 import { ChevronRight } from 'lucide-react';
@@ -25,27 +26,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-
-const currencies = [
-    'USD', 
-    'EUR',
-    'GBP',
-    'RUB', 
-    'JPY', 
-    'CAD',
-    'CHF',
-    'CNY',
-    'KRW',
-    'AUD',
-    'NZD',
-    'SGD',
-    'KZT', 
-    'NGN',
-    'INR',
-    'ZAR',
-    'SEK',
-    'MXN'
-] 
 
 const languages = [
     { code: 'en', label: 'English' },
@@ -117,7 +97,7 @@ export const WalletSettingsPage : React.FC = () => {
                                 <SelectValue placeholder={currency} />
                             </SelectTrigger>
                             <SelectContent>
-                                {currencies.map(currency => (
+                                {FIAT_CURRENCIES.map(currency => (
                                     <SelectItem key={currency} value={currency}>{currency}</SelectItem>
                                 ))}
                             </SelectContent>
