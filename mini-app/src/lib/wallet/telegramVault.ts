@@ -128,19 +128,44 @@ export const telegramVaultUnavailableReason = (): string | null => {
 type LooseRequest = (
     method: string,
     events: string[],
-    options: { params?: object; timeout?: number }
+    options: {
+        params?: object
+        timeout?: number
+        capture?: (result: { payload?: { req_id?: string } }) => boolean
+    }
 ) => Promise<unknown>
 
 // The SDK's typed overloads cannot express a different event set per method;
 // the bridge still validates method/event names at runtime.
 const send = request as unknown as LooseRequest
 
+const newRequestId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
 const bridgeRequest = async (
     method: string,
     events: string[],
     params?: object
 ): Promise<BridgeResult> => {
-    const raw = await send(method, events, { params, timeout: CALL_TIMEOUT_MS }) as Record<string, unknown>
+    // Telegram requires a req_id in every SecureStorage request and echoes it
+    // in the response event. Without it, iOS never emits a response and the
+    // bridge request times out.
+    const reqId = newRequestId()
+    let raw: Record<string, unknown>
+    try {
+        raw = await send(method, events, {
+            params: { ...params, req_id: reqId },
+            capture: ({ payload }) => payload?.req_id === reqId,
+            timeout: CALL_TIMEOUT_MS
+        }) as Record<string, unknown>
+    } catch (error) {
+        if (error instanceof Error && /timeout/i.test(error.message)) {
+            throw new Error('Secure storage did not respond. Reopen Brio and try again, or use a browser with a passkey.')
+        }
+        throw error
+    }
     // Depending on the SDK version, a multi-event request resolves either to
     // { event, payload } or directly to the captured event payload.
     const result: BridgeResult = typeof raw.event === 'string'
@@ -192,8 +217,10 @@ const call = <T>(operation: (callback: StorageCallback<T>) => void): Promise<T |
     })
 
 const requireTransport = () => {
-    if (bridgeSupported()) return 'bridge' as const
+    // Prefer the documented high-level API: iOS injects it directly and its
+    // callbacks are more reliable than the low-level bridge events.
     if (directStorage()) return 'direct' as const
+    if (bridgeSupported()) return 'bridge' as const
     throw new Error(SECURE_STORAGE_UNAVAILABLE)
 }
 
