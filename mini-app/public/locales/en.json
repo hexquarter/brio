@@ -150,5 +150,19 @@
     "wallet.settings.resetDescription": "Remove the wallet from this device",
     "wallet.settings.deleteBackupDescription": "Delete the wallet and its encrypted backup",
     "walletBackup.copyButton": "Copy recovery phrase",
-    "walletActivities.showMore": "Show more"
+    "walletActivities.showMore": "Show more",
+    "wallet.telegram.chooseContact": "Choose a contact",
+    "wallet.telegram.chooseContactDescription": "Search a Telegram username or pick someone you already paid.",
+    "wallet.telegram.clearSearch": "Clear search",
+    "wallet.telegram.searchResult": "Search result",
+    "wallet.telegram.useContact": "Tap to use this contact",
+    "wallet.telegram.searching": "Searching…",
+    "wallet.telegram.recentContact": "Recent contact",
+    "wallet.telegram.removeContact": "Remove contact",
+    "wallet.telegram.noContacts": "No saved contacts",
+    "wallet.telegram.noContactsHint": "Search a Telegram username to send your first payment.",
+    "wallet.telegram.shareInvitation": "Share an invitation",
+    "common.close": "Close",
+    "wallet.receive.addressUnavailable": "Your address is not ready yet. Try again in a moment.",
+    "wallet.receive.loadFailed": "We could not load your address. Please try again."
 }

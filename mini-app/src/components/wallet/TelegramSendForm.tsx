@@ -307,7 +307,6 @@ export const TelegramSendForm = () => {
     const removeFavoriteContact = async (contact: string) => {
         await removeContact(contact)
         setContacts(await listContacts())
-        setOpen(false)
     }
 
     return (

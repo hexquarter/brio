@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Tabs, TabsList, TabsContent, TabsTrigger } from '@/components/ui/tabs';
 
 import { LuShare2, LuCopy } from "react-icons/lu";
+import { ShieldAlert } from "lucide-react";
 import QRCode from "react-qr-code";
 import { useWallet } from '@/lib/wallet/context';
 import { toast } from "sonner"
@@ -12,38 +13,81 @@ import { Button } from '@/components/ui/button';
 import { haptics } from '@/lib/telegram/ui';
 import { cn } from '@/lib/utils';
 
+type ReceiveError = 'unavailable' | 'failed' | null
+
 export const WalletReceivePage : React.FC = () => {
     const { t } = useTranslation()
     const { getBtcAddress, getLnUrl, breezSdk  } = useWallet()
 
     const [btcAddress, setBtcAddress] = useState<string | undefined>(undefined)
     const [lnURL, setLnURL] = useState<string | undefined>(undefined)
-    const [loading, setLoading] = useState(true)
+    const [lnLoading, setLnLoading] = useState(true)
+    const [btcLoading, setBtcLoading] = useState(true)
+    const [lnError, setLnError] = useState<ReceiveError>(null)
+    const [btcError, setBtcError] = useState<ReceiveError>(null)
+    const [lnReloadKey, setLnReloadKey] = useState(0)
+    const [btcReloadKey, setBtcReloadKey] = useState(0)
 
+    // Load the Lightning address and the Bitcoin address independently. The
+    // Bitcoin address can be slow or fail while the Lightning QR is already
+    // available, so it must never block the Lightning tab.
     useEffect(() => {
         if (!breezSdk) {
+            setLnLoading(false)
+            setLnError('failed')
             return
         }
 
         let cancelled = false
 
-        const loadOfferAndAddress = async () => {
+        const loadLightningAddress = async () => {
+            setLnLoading(true)
+            setLnError(null)
             try {
-                const [invoice, address] = await Promise.all([
-                    getLnUrl(breezSdk),
-                    getBtcAddress(breezSdk)
-                ])
+                const invoice = await getLnUrl(breezSdk)
                 if (cancelled) return
                 if (invoice) setLnURL(invoice)
-                if (address) setBtcAddress(address)
+                else setLnError('unavailable')
+            } catch (error) {
+                console.error('Unable to load the Lightning address:', error)
+                if (!cancelled) setLnError('failed')
             } finally {
-                if (!cancelled) setLoading(false)
+                if (!cancelled) setLnLoading(false)
             }
         }
-        void loadOfferAndAddress()
+        void loadLightningAddress()
 
         return () => { cancelled = true }
-    }, [breezSdk])
+    }, [breezSdk, lnReloadKey])
+
+    useEffect(() => {
+        if (!breezSdk) {
+            setBtcLoading(false)
+            setBtcError('failed')
+            return
+        }
+
+        let cancelled = false
+
+        const loadBitcoinAddress = async () => {
+            setBtcLoading(true)
+            setBtcError(null)
+            try {
+                const address = await getBtcAddress(breezSdk)
+                if (cancelled) return
+                if (address) setBtcAddress(address)
+                else setBtcError('unavailable')
+            } catch (error) {
+                console.error('Unable to load the Bitcoin address:', error)
+                if (!cancelled) setBtcError('failed')
+            } finally {
+                if (!cancelled) setBtcLoading(false)
+            }
+        }
+        void loadBitcoinAddress()
+
+        return () => { cancelled = true }
+    }, [breezSdk, btcReloadKey])
 
     const notifyCopied = (key: string) => {
         haptics.success()
@@ -88,6 +132,37 @@ export const WalletReceivePage : React.FC = () => {
         haptics.impact()
         openTelegramLink(
             `https://t.me/share/url?url=${encodeURIComponent('https://t.me/' + botInfo.username)}&text=${encodeURIComponent(msg)}`
+        )
+    }
+
+    const retryLightning = () => {
+        haptics.selection()
+        setLnReloadKey(key => key + 1)
+    }
+
+    const retryBitcoin = () => {
+        haptics.selection()
+        setBtcReloadKey(key => key + 1)
+    }
+
+    const loadingCard = (
+        <div className="app-card h-72 animate-pulse bg-white/70" />
+    )
+
+    const errorCard = (error: Exclude<ReceiveError, null>, onRetry: () => void) => {
+        const message = error === 'unavailable'
+            ? t('wallet.receive.addressUnavailable')
+            : t('wallet.receive.loadFailed')
+        return (
+            <div className="app-card flex flex-col items-center gap-4 p-6 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500">
+                    <ShieldAlert className="h-6 w-6" />
+                </span>
+                <p className="text-sm text-gray-500">{message}</p>
+                <Button variant="outline" className="h-11 px-6" onClick={onRetry}>
+                    {t('common.retry')}
+                </Button>
+            </div>
         )
     }
 
@@ -137,8 +212,9 @@ export const WalletReceivePage : React.FC = () => {
                 </TabsList>
 
                 <TabsContent value="lightning">
-                    {loading && <div className="app-card h-72 animate-pulse bg-white/70" />}
-                    {!loading && lnURL && addressCard(
+                    {lnLoading && loadingCard}
+                    {!lnLoading && lnError && errorCard(lnError, retryLightning)}
+                    {!lnLoading && !lnError && lnURL && addressCard(
                         lnURL,
                         t('wallet.receive.lightningOffer'),
                         () => void copyLightningAddress(),
@@ -147,8 +223,9 @@ export const WalletReceivePage : React.FC = () => {
                 </TabsContent>
 
                 <TabsContent value="btc">
-                    {loading && <div className="app-card h-72 animate-pulse bg-white/70" />}
-                    {!loading && btcAddress && addressCard(
+                    {btcLoading && loadingCard}
+                    {!btcLoading && btcError && errorCard(btcError, retryBitcoin)}
+                    {!btcLoading && !btcError && btcAddress && addressCard(
                         btcAddress,
                         t('wallet.receive.btcAddress'),
                         () => void copyBitcoinAddress(),

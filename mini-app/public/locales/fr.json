@@ -151,5 +151,19 @@
     "wallet.settings.resetDescription": "Retirer le portefeuille de cet appareil",
     "wallet.settings.deleteBackupDescription": "Supprimer le portefeuille et sa sauvegarde chiffrée",
     "walletBackup.copyButton": "Copier la phrase de récupération",
-    "walletActivities.showMore": "Afficher plus"
+    "walletActivities.showMore": "Afficher plus",
+    "wallet.telegram.chooseContact": "Choisir un contact",
+    "wallet.telegram.chooseContactDescription": "Recherchez un nom d’utilisateur Telegram ou choisissez un contact déjà payé.",
+    "wallet.telegram.clearSearch": "Effacer la recherche",
+    "wallet.telegram.searchResult": "Résultat de la recherche",
+    "wallet.telegram.useContact": "Touchez pour utiliser ce contact",
+    "wallet.telegram.searching": "Recherche…",
+    "wallet.telegram.recentContact": "Contact récent",
+    "wallet.telegram.removeContact": "Supprimer le contact",
+    "wallet.telegram.noContacts": "Aucun contact enregistré",
+    "wallet.telegram.noContactsHint": "Recherchez un nom d’utilisateur Telegram pour envoyer votre premier paiement.",
+    "wallet.telegram.shareInvitation": "Partager une invitation",
+    "common.close": "Fermer",
+    "wallet.receive.addressUnavailable": "Votre adresse n’est pas encore prête. Réessayez dans un instant.",
+    "wallet.receive.loadFailed": "Impossible de charger votre adresse. Veuillez réessayer."
 }

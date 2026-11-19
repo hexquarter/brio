@@ -151,5 +151,19 @@
     "wallet.settings.resetDescription": "Eliminar la cartera de este dispositivo",
     "wallet.settings.deleteBackupDescription": "Eliminar la cartera y su copia cifrada",
     "walletBackup.copyButton": "Copiar frase de recuperación",
-    "walletActivities.showMore": "Mostrar más"
+    "walletActivities.showMore": "Mostrar más",
+    "wallet.telegram.chooseContact": "Elegir un contacto",
+    "wallet.telegram.chooseContactDescription": "Busca un nombre de usuario de Telegram o elige alguien a quien ya hayas pagado.",
+    "wallet.telegram.clearSearch": "Borrar búsqueda",
+    "wallet.telegram.searchResult": "Resultado de la búsqueda",
+    "wallet.telegram.useContact": "Toca para usar este contacto",
+    "wallet.telegram.searching": "Buscando…",
+    "wallet.telegram.recentContact": "Contacto reciente",
+    "wallet.telegram.removeContact": "Eliminar contacto",
+    "wallet.telegram.noContacts": "No hay contactos guardados",
+    "wallet.telegram.noContactsHint": "Busca un nombre de usuario de Telegram para enviar tu primer pago.",
+    "wallet.telegram.shareInvitation": "Compartir una invitación",
+    "common.close": "Cerrar",
+    "wallet.receive.addressUnavailable": "Tu dirección aún no está lista. Inténtalo de nuevo en un momento.",
+    "wallet.receive.loadFailed": "No pudimos cargar tu dirección. Inténtalo de nuevo."
 }
