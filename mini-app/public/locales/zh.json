@@ -151,5 +151,19 @@
     "wallet.settings.resetDescription": "从此设备移除此钱包",
     "wallet.settings.deleteBackupDescription": "删除钱包及其加密备份",
     "walletBackup.copyButton": "复制恢复短语",
-    "walletActivities.showMore": "显示更多"
+    "walletActivities.showMore": "显示更多",
+    "wallet.telegram.chooseContact": "选择联系人",
+    "wallet.telegram.chooseContactDescription": "搜索 Telegram 用户名，或选择你已付款过的联系人。",
+    "wallet.telegram.clearSearch": "清除搜索",
+    "wallet.telegram.searchResult": "搜索结果",
+    "wallet.telegram.useContact": "点击使用此联系人",
+    "wallet.telegram.searching": "搜索中…",
+    "wallet.telegram.recentContact": "最近联系人",
+    "wallet.telegram.removeContact": "删除联系人",
+    "wallet.telegram.noContacts": "暂无已保存的联系人",
+    "wallet.telegram.noContactsHint": "搜索 Telegram 用户名以发送第一笔付款。",
+    "wallet.telegram.shareInvitation": "分享邀请",
+    "common.close": "关闭",
+    "wallet.receive.addressUnavailable": "你的地址尚未准备好，请稍后重试。",
+    "wallet.receive.loadFailed": "无法加载你的地址，请重试。"
 }

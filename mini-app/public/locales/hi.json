@@ -151,5 +151,19 @@
     "wallet.settings.resetDescription": "इस डिवाइस से वॉलेट हटाएं",
     "wallet.settings.deleteBackupDescription": "वॉलेट और उसका एन्क्रिप्टेड बैकअप हटाएं",
     "walletBackup.copyButton": "रिकवरी वाक्यांश कॉपी करें",
-    "walletActivities.showMore": "और दिखाएं"
+    "walletActivities.showMore": "और दिखाएं",
+    "wallet.telegram.chooseContact": "संपर्क चुनें",
+    "wallet.telegram.chooseContactDescription": "Telegram उपयोगकर्ता नाम खोजें या पहले भुगतान किए गए संपर्क को चुनें।",
+    "wallet.telegram.clearSearch": "खोज साफ़ करें",
+    "wallet.telegram.searchResult": "खोज परिणाम",
+    "wallet.telegram.useContact": "इस संपर्क का उपयोग करने के लिए टैप करें",
+    "wallet.telegram.searching": "खोज रहे हैं…",
+    "wallet.telegram.recentContact": "हाल का संपर्क",
+    "wallet.telegram.removeContact": "संपर्क हटाएं",
+    "wallet.telegram.noContacts": "कोई सहेजा गया संपर्क नहीं",
+    "wallet.telegram.noContactsHint": "पहला भुगतान भेजने के लिए Telegram उपयोगकर्ता नाम खोजें।",
+    "wallet.telegram.shareInvitation": "निमंत्रण साझा करें",
+    "common.close": "बंद करें",
+    "wallet.receive.addressUnavailable": "आपका पता अभी तैयार नहीं है। थोड़ी देर में फिर से प्रयास करें।",
+    "wallet.receive.loadFailed": "हम आपका पता लोड नहीं कर सके। कृपया फिर से प्रयास करें।"
 }
