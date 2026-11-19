@@ -28,7 +28,7 @@
     "walletRestore.invalidMnemonic": "您输入的助记词无效。请检查后重试。",
     "walletSecure.title": "保护您的钱包",
     "walletSecure.registerButton": "创建通行密钥和钱包",
-    "walletSecure.telegramNotice": "Telegram 将使用此设备的安全存储（钥匙串或密钥库）保护您的钱包，无需通行密钥。",
+    "walletSecure.telegramNotice": "您的钱包受此设备的安全存储保护。",
     "walletSecure.telegramRegisterButton": "创建并保护钱包",
     "walletSecure.telegramProgress1": "正在使用设备安全存储加密您的钱包...",
     "walletSecure.goToWalletButton": "前往我的钱包",

@@ -28,7 +28,7 @@
     "walletRestore.invalidMnemonic": "La frase mnemotécnica ingresada es inválida. Verifícala e intenta de nuevo.",
     "walletSecure.title": "Protege tu cartera",
     "walletSecure.registerButton": "Crear clave de acceso y cartera",
-    "walletSecure.telegramNotice": "Telegram protegerá tu billetera con el almacenamiento seguro de este dispositivo (Keychain o Keystore). No necesitas una passkey.",
+    "walletSecure.telegramNotice": "Tu billetera está protegida por el almacenamiento seguro de este dispositivo.",
     "walletSecure.telegramRegisterButton": "Crear y proteger la billetera",
     "walletSecure.telegramProgress1": "Cifrando tu billetera con el almacenamiento seguro del dispositivo...",
     "walletSecure.goToWalletButton": "Ir a mi cartera",

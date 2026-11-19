@@ -28,7 +28,7 @@
     "walletRestore.invalidMnemonic": "आपने जो म्नेमोनिक वाक्यांश दर्ज किया है वह अमान्य है। कृपया जाँच कर पुनः प्रयास करें।",
     "walletSecure.title": "अपना वॉलेट सुरक्षित करें",
     "walletSecure.registerButton": "पासकी और वॉलेट बनाएँ",
-    "walletSecure.telegramNotice": "Telegram आपके वॉलेट को इस डिवाइस के सुरक्षित संग्रहण (Keychain या Keystore) से सुरक्षित रखेगा। पासकी की आवश्यकता नहीं है।",
+    "walletSecure.telegramNotice": "आपका वॉलेट इस डिवाइस के सुरक्षित संग्रहण द्वारा सुरक्षित है।",
     "walletSecure.telegramRegisterButton": "वॉलेट बनाएँ और सुरक्षित करें",
     "walletSecure.telegramProgress1": "डिवाइस के सुरक्षित संग्रहण से आपका वॉलेट एन्क्रिप्ट किया जा रहा है...",
     "walletSecure.goToWalletButton": "मेरे वॉलेट पर जाएँ",

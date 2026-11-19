@@ -28,7 +28,7 @@
     "walletRestore.invalidMnemonic": "La phrase mnémonique que vous avez entrée est invalide. Veuillez vérifier et réessayer.",
     "walletSecure.title": "Sécurisez votre portefeuille",
     "walletSecure.registerButton": "Créer la clé d’accès et le portefeuille",
-    "walletSecure.telegramNotice": "Telegram protégera votre portefeuille avec le stockage sécurisé de cet appareil (Keychain ou Keystore). Aucune clé d'accès n'est nécessaire.",
+    "walletSecure.telegramNotice": "Votre portefeuille est protégé par le stockage sécurisé de cet appareil.",
     "walletSecure.telegramRegisterButton": "Créer et sécuriser le portefeuille",
     "walletSecure.telegramProgress1": "Chiffrement de votre portefeuille avec le stockage sécurisé de l'appareil...",
     "walletSecure.goToWalletButton": "Aller à mon portefeuille",

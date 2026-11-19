@@ -27,7 +27,7 @@
     "walletRestore.invalidMnemonic": "The mnemonic phrase you entered is invalid. Please check and try again.",
     "walletSecure.title": "Secure your wallet",
     "walletSecure.registerButton": "Create passkey and wallet",
-    "walletSecure.telegramNotice": "Telegram will protect your wallet with this device's secure storage (Keychain or Keystore). No passkey is needed.",
+    "walletSecure.telegramNotice": "Your wallet is protected by this device's secure storage.",
     "walletSecure.telegramRegisterButton": "Create wallet and secure it",
     "walletSecure.telegramProgress1": "Encrypting your wallet with device secure storage...",
     "walletSecure.goToWalletButton": "Go to my Wallet",
