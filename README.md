@@ -75,7 +75,8 @@ Set these build-time variables (for example in `mini-app/.env`):
 - `VITE_WEBAUTHN_RP_NAME` — optional WebAuthn relying party name. Defaults to `Brio Wallet`.
 - `VITE_WEBAUTHN_PRF_SALT` — optional PRF salt. Defaults to a Brio-specific value.
 - `VITE_TELEGRAM_BOT_USERNAME` — optional bot username, avoids the `bot-info` RPC.
-- `VITE_COINGECKO_DEMO_API_KEY` — optional CoinGecko price API key.
+
+Bitcoin prices come from the PriceStr Nostr relay (`wss://relay.pricestr.xyz`), so no price API key or backend call is needed.
 
 Build and run from HTTPS so WebAuthn is available:
 
@@ -85,6 +86,15 @@ npm install
 npm run dev:https
 npm run build
 ```
+
+### GitHub Pages deployment
+
+`.github/workflows/deploy-ui.yml` builds the mini app and deploys it with the official GitHub Pages actions. Before the first run:
+
+1. Set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**.
+2. Add the repository secrets `VITE_BREEZ_API_KEY`, `VITE_BACKEND_ENDPOINT`, and `VITE_TELEGRAM_BOT_USERNAME`.
+
+The workflow runs on pushes to `master` and `refactor/nostr`, plus manual runs from the Actions tab. It derives the Vite base path from the repository name, so the app is served correctly at `https://<owner>.github.io/<repo>/` (or at the root for a `<owner>.github.io` repository).
 
 If wallet creation fails with "The operation either timed out or was not allowed", the browser rejected the WebAuthn request. Use HTTPS (`npm run dev:https`), open the app in Safari or Chrome rather than an embedded preview/webview, keep the window focused, and make sure the device has a platform authenticator (Touch ID, Windows Hello, or a security key). Passkeys also do not work on IP-address origins such as `http://127.0.0.1`; use `http://localhost`.
 
