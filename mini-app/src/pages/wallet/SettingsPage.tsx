@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Select,
@@ -13,8 +13,9 @@ import { FIAT_CURRENCIES } from '@/lib/wallet/api';
 import { hasSecureExport } from '@/lib/wallet/backup';
 import { haptics } from '@/lib/telegram/ui';
 import { isTelegramVaultAvailable } from '@/lib/wallet/telegramVault';
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NostrProfilePanel } from '@/components/wallet/NostrProfilePanel';
 
 import {
   AlertDialog,
@@ -59,6 +60,7 @@ export const WalletSettingsPage : React.FC = () => {
     const exportSaved = hasSecureExport()
     const usingTelegramVault = isTelegramVaultAvailable()
     const currentLanguage = i18n.language.split('-')[0]
+    const [advancedOpen, setAdvancedOpen] = useState(false)
 
     const changeLanguage = (code: string) => {
         haptics.selection()
@@ -152,6 +154,28 @@ export const WalletSettingsPage : React.FC = () => {
                         <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
                     </button>
                 </div>
+            </section>
+
+            <section className="app-card divide-y divide-black/5">
+                <button
+                    type="button"
+                    onClick={() => {
+                        haptics.selection()
+                        setAdvancedOpen(open => !open)
+                    }}
+                    className="flex w-full items-center justify-between gap-3 py-3 text-left"
+                >
+                    <span className="flex flex-col">
+                        <span className="text-sm font-medium">{t('wallet.settings.advanced')}</span>
+                        <span className="text-xs text-gray-400">{t('wallet.settings.advancedDescription')}</span>
+                    </span>
+                    <ChevronDown className={cn('h-4 w-4 shrink-0 text-gray-300 transition-transform', advancedOpen && 'rotate-180')} />
+                </button>
+                {advancedOpen && (
+                    <div className="px-4 pb-3">
+                        <NostrProfilePanel />
+                    </div>
+                )}
             </section>
 
             <section className="app-card divide-y divide-black/5">

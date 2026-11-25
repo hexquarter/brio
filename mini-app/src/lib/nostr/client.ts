@@ -188,6 +188,41 @@ export const lookupProfile = async (contact: string): Promise<ProfileLookup | nu
   }
 }
 
+export type FetchedNostrProfile = {
+  eventId: string
+  createdAt: number
+  profile: NostrProfile
+}
+
+export const fetchNostrProfile = async (
+  publicKey: string
+): Promise<FetchedNostrProfile | null> => {
+  const config = await getNostrConfig()
+  if (!config.relays.length) return null
+
+  const pool = new SimplePool()
+  try {
+    const events = await pool.querySync(config.relays, {
+      kinds: [0],
+      authors: [publicKey],
+      limit: 1
+    }, { maxWait: RELAY_TIMEOUT_MS })
+    const event = latest(events.filter(verifyEvent))
+    if (!event) return null
+
+    let profile: NostrProfile
+    try {
+      profile = JSON.parse(event.content) as NostrProfile
+    } catch {
+      return null
+    }
+
+    return { eventId: event.id, createdAt: event.created_at, profile }
+  } finally {
+    pool.close(config.relays)
+  }
+}
+
 export const publishProfile = async (
   mnemonic: string,
   profile: Omit<NostrProfile, 'nostrPublicKey' | 'updatedAt'>,

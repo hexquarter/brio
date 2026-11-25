@@ -36,7 +36,9 @@ import { clearSecureExport } from '@/lib/wallet/backup';
 import { clearContacts } from '@/lib/wallet/contact';
 import { clearNostrIdentity } from '@/lib/nostr/identity';
 import { publishAndVerifyProfile } from '@/lib/nostr/profile';
+import { getTelegramUsername } from '@/lib/telegram/username';
 import {
+    clearProfileOverrides,
     clearProfileSynced,
     clearSessionMnemonic,
     getSessionMnemonic,
@@ -232,6 +234,7 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
             clearSecureExport()
         }
         clearProfileSynced()
+        clearProfileOverrides()
         clearContacts()
         clearSessionMnemonic()
         clearNostrIdentity()
@@ -284,6 +287,7 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         sessionStorage.removeItem(WALLET_LN_URL)
         sessionStorage.removeItem(WALLET_BTC_ADDRESS)
         clearProfileSynced()
+        clearProfileOverrides()
         clearContacts()
         clearSecureExport()
         storeSessionMnemonic(mnemonic)
@@ -293,7 +297,8 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     }
 
     // Wallets created before Lightning address registration (or restored
-    // without the onboarding step) may not have one yet. Register the same
+    // without the onboarding step) may not have one yet. Prefer the Telegram
+    // username so the address is easy to share, then fall back to the same
     // deterministic username used during onboarding so Receive always works.
     const resolveLightningAddress = async (breezSdk: BreezSdk) => {
         // The SDK can take a moment to load a previously registered address
@@ -310,6 +315,21 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         const mnemonic = getSessionMnemonic()
         if (!mnemonic) {
             return current ?? null
+        }
+
+        // Try the Telegram username first (e.g. wallets restored without the
+        // onboarding step). If it is taken — possibly by this same wallet on
+        // another device — the existing address is returned below.
+        const telegramUsername = getTelegramUsername()?.toLowerCase()
+        if (telegramUsername) {
+            try {
+                const request = { username: telegramUsername }
+                if (await breezSdk.checkLightningAddressAvailable(request)) {
+                    return await breezSdk.registerLightningAddress(request)
+                }
+            } catch (error) {
+                console.warn('Unable to register the Telegram Lightning address:', error)
+            }
         }
 
         try {
