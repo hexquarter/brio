@@ -25,12 +25,20 @@ export const WelcomePage: FC = () => {
   }, [])
 
   if (!checked) return null
-  const startParams = new URLSearchParams(tgData.tgWebAppData?.start_param || '')
+  const startParam = tgData.tgWebAppData?.start_param || ''
+  const startParams = new URLSearchParams(startParam)
   const paymentId = startParams.get('payment')
+  // Gateway deep links: a bare npub in start_param opens the send screen
+  // with that Nostr recipient prefilled (see the backend /resolve endpoints).
+  const recipientNpub = startParam.startsWith('npub1')
+    ? startParam
+    : startParams.get('npub')
   if (wallet.walletExists) {
     const target = paymentId
       ? `/app/wallet?payment=${encodeURIComponent(paymentId)}`
-      : '/app/wallet'
+      : recipientNpub
+        ? `/app/wallet/send?to=${encodeURIComponent(recipientNpub)}`
+        : '/app/wallet'
     return <Navigate to={target} replace />
   }
   if (tgData.tgWebAppData?.start_param) return <Navigate to="/app/nowallet" replace />

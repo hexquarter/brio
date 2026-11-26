@@ -8,13 +8,14 @@ import { convertBtcToSats, convertSatsToBtc, formatBtcAmount, formatFiatAmount }
 import { fetchBotInfo, fetchPrice, normalizeContact, notifyPayment } from "@/lib/wallet/api"
 import { Spinner } from "@telegram-apps/telegram-ui"
 import { getSessionMnemonic, useWallet } from '@/lib/wallet/context.tsx';
-import { useNavigate, useOutletContext } from "react-router-dom"
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom"
 import { PrepareLnurlPayResponse, SdkEvent } from "@breeztech/breez-sdk-spark/web"
 import { toast } from "sonner"
 import { openTelegramLink, retrieveLaunchParams } from "@telegram-apps/sdk-react"
 import { addContact, listContacts, removeContact } from "@/lib/wallet/contact"
 import { SearchContactForm } from "./TelegramSearchContact"
-import { lookupProfile, publishPayment } from "@/lib/nostr/client"
+import { publishPayment } from "@/lib/nostr/client"
+import { resolveRecipient } from "@/lib/nostr/resolve"
 import { hash } from "@/helpers/crypto"
 import { haptics, hasMainButton, useMainButton } from "@/lib/telegram/ui"
 import { isMockedTelegramEnv } from "@/lib/telegram/env"
@@ -34,29 +35,34 @@ export const TelegramSendForm = () => {
     const [fees, setFees] = useState(0)
     const [loadingPayment, setLoadingPayment] = useState<null | string>(null)
     const [contacts, setContacts] = useState<string[]>([])
+    const [isTelegramContact, setIsTelegramContact] = useState(false)
 
     const [btcBalance] = useOutletContext<any>()
     const [remaining, setRemaining] = useState(0)
     const [loadingAll, setLoadingAll] = useState(false)
+    const [searchParams] = useSearchParams()
+
+    // Gateway deep links (startapp=<npub>) land on the send form with a
+    // prefilled Nostr recipient.
+    useEffect(() => {
+        const to = searchParams.get('to')
+        if (to) setSearch(to)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     useEffect(() => {
         setLookupError(null)
         if (search == "" ||  !breezSdk) return
         const delayDebounceFn = setTimeout(async () => {
-            const strippedContact = search.startsWith('@')
-                ? search.slice(1, search.length)
-                : search
             try {
-                const result = await lookupProfile(strippedContact)
+                const result = await resolveRecipient(search)
                 if (result) {
                     setAddress(result.address)
                     setRecipientPubkey(result.publicKey)
+                    setIsTelegramContact(result.isTelegramHandle)
                     const price = await fetchPrice(currency)
                     setPrice(price)
-                    setContact(strippedContact.startsWith("+") ? strippedContact : `@${strippedContact}`)
-                    // let contactSet = new Set(contacts)
-                    // contactSet = contact.startsWith("+") ? contactSet.add(contact) : contactSet.add(`@${strippedContact}`)
-                    // setContacts(Array.from(contactSet))
+                    setContact(result.label)
                     return
                 }
 
@@ -204,7 +210,7 @@ export const TelegramSendForm = () => {
                                     try {
                                         const mnemonic = getSessionMnemonic()
                                         if (mnemonic) {
-                                            const recipientContact = contact
+                                            const recipientContact = contact && isTelegramContact
                                                 ? await hash(normalizeContact(contact))
                                                 : undefined
                                             const paymentEvent = await publishPayment(mnemonic, {
