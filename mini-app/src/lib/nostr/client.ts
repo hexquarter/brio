@@ -11,7 +11,6 @@ export type NostrProfile = {
   lightningAddress?: string
   lnurl?: string
   btcAddress?: string
-  taprootAddress?: string
   nostrPublicKey: string
   updatedAt: number
 }
@@ -29,7 +28,6 @@ export type ProfileLookup = {
   address: string
   publicKey: string
   btcAddress?: string
-  taprootAddress?: string
 }
 
 type NostrConfig = {
@@ -166,7 +164,6 @@ export const lookupProfile = async (contact: string): Promise<ProfileLookup | nu
       lnurl?: string
       lud16?: string
       btcAddress?: string
-      taprootAddress?: string
     }
     try {
       profile = JSON.parse(profileEvent.content) as typeof profile
@@ -180,8 +177,7 @@ export const lookupProfile = async (contact: string): Promise<ProfileLookup | nu
     return {
       address,
       publicKey,
-      btcAddress: profile.btcAddress,
-      taprootAddress: profile.taprootAddress
+      btcAddress: profile.btcAddress
     }
   } finally {
     pool.close(config.relays)

@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next";
 import { Progress } from "@/components/ui/progress";
 
 import type { BreezSdk } from '@breeztech/breez-sdk-spark/web'
-import { generateChildKey, generateTapRootAddress } from "@/helpers/crypto";
 import { useNavigate } from "react-router-dom";
 import { publishAndVerifyProfile } from "@/lib/nostr/profile";
 import { getTelegramUsername } from "@/lib/telegram/username";
@@ -23,8 +22,6 @@ import { ShieldCheck } from "lucide-react";
 import { haptics } from "@/lib/telegram/ui";
 
 type LnAddressInfo = Awaited<ReturnType<BreezSdk['getLightningAddress']>>
-
-type UsernameChoice = { username?: string; useAutomatic?: boolean }
 
 export function SecureWalletPage() {
     const wallet = useWallet()
@@ -46,7 +43,7 @@ export function SecureWalletPage() {
 
     // When the preferred Lightning address username is not available, the
     // flow pauses mid-registration and asks the user to pick one.
-    const usernameResolverRef = useRef<((choice: UsernameChoice) => void) | null>(null)
+    const usernameResolverRef = useRef<((username: string) => void) | null>(null)
     const [usernamePrompt, setUsernamePrompt] = useState<{
         suggestion: string;
         reason: 'taken' | 'choose';
@@ -58,18 +55,18 @@ export function SecureWalletPage() {
         setUsernamePrompt({ suggestion, reason })
         setUsernameInput(suggestion)
         setUsernameError(null)
-        return new Promise<UsernameChoice>(resolve => {
+        return new Promise<string>(resolve => {
             usernameResolverRef.current = resolve
         })
     }
 
-    const resolveUsername = (choice: UsernameChoice) => {
+    const resolveUsername = (username: string) => {
         haptics.impact()
         setUsernamePrompt(null)
         setUsernameError(null)
         const resolver = usernameResolverRef.current
         usernameResolverRef.current = null
-        resolver?.(choice)
+        resolver?.(username)
     }
 
     async function secureWallet() {
@@ -106,23 +103,13 @@ export function SecureWalletPage() {
                 throw new Error("Cannot load the Breez SDK.")
             }
 
-            step = 'deriving address'
-            const childKey = await generateChildKey(mnemonic)
-            if (!childKey.publicKey) {
-                throw new Error('Cannot retrieve Bitcoin public key.')
-            }
-            const tapRootAddress = await generateTapRootAddress(childKey.publicKey)
-            if (!tapRootAddress) {
-                throw new Error('Cannot retrieve Bitcoin address.')
-            }
-
             setProgressValue(33)
             setProgressLabel(t('walletSecure.progress33'))
 
             setProgressLabel(t('walletSecure.progress66'))
             setProgressValue(66)
             step = 'registering Lightning address'
-            const lnInfo = await registerLightningAddress(sdk, tapRootAddress)
+            const lnInfo = await registerLightningAddress(sdk)
             if (!lnInfo?.lightningAddress || !lnInfo.lnurl?.url) {
                 throw new Error(t('walletSecure.noLightningAddressGenerated'))
             }
@@ -152,9 +139,8 @@ export function SecureWalletPage() {
 
     // Registers the Lightning address with the Telegram username when
     // possible. If it is not available (or there is no Telegram username),
-    // the flow pauses and lets the user choose a username before falling
-    // back to the deterministic taproot address.
-    async function registerLightningAddress(sdk: BreezSdk, tapRootAddress: string) {
+    // the flow pauses and lets the user choose a username.
+    async function registerLightningAddress(sdk: BreezSdk) {
         const register = async (username: string) => {
             const request = { username }
             if (!(await sdk.checkLightningAddressAvailable(request))) return null
@@ -181,20 +167,12 @@ export function SecureWalletPage() {
                 return existing
             }
 
-            const suggestion = telegramUsername
-                ? `${telegramUsername}${Math.floor(1000 + Math.random() * 9000)}`
-                : tapRootAddress
             const choice = await askForUsername(
-                suggestion,
+                telegramUsername ? `${telegramUsername}${Math.floor(1000 + Math.random() * 9000)}` : '',
                 telegramUsername ? 'taken' : 'choose'
             )
 
-            if (choice.useAutomatic) {
-                info = await register(tapRootAddress) ?? await sdk.getLightningAddress()
-                continue
-            }
-
-            const username = choice.username?.trim().toLowerCase() ?? ''
+            const username = choice.trim().toLowerCase()
             if (!LIGHTNING_USERNAME_PATTERN.test(username)) {
                 haptics.error()
                 setUsernameError(t('walletSecure.usernameInvalid'))
@@ -314,16 +292,13 @@ export function SecureWalletPage() {
                                         setUsernameInput(event.target.value)
                                         setUsernameError(null)
                                     }}
-                                    placeholder={usernamePrompt.suggestion}
+                                    placeholder={t('wallet.receive.customizeAddress.placeholder')}
                                 />
                             </label>
                             <p className="text-xs text-gray-500">{t('walletSecure.lightningAddressUsernameHint')}</p>
                             {usernameError && <p className="text-sm text-red-600">{usernameError}</p>}
-                            <Button type="button" className="w-full" onClick={() => resolveUsername({ username: usernameInput })}>
+                            <Button type="button" className="w-full" onClick={() => resolveUsername(usernameInput)}>
                                 {t('walletSecure.continueButton')}
-                            </Button>
-                            <Button type="button" variant="outline" className="w-full" onClick={() => resolveUsername({ useAutomatic: true })}>
-                                {t('walletSecure.useAutomaticAddress')}
                             </Button>
                         </div>
                     )}

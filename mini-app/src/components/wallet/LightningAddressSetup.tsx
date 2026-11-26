@@ -8,8 +8,7 @@ import { getTelegramUsername } from '@/lib/telegram/username';
 import { haptics } from '@/lib/telegram/ui';
 
 // Lets the user claim a Lightning address username (user@domain) directly
-// from the Receive page, either the Telegram username, a custom one, or the
-// automatic (deterministic) address.
+// from the Receive page.
 export const LightningAddressSetup = ({ onDone }: { onDone: () => void }) => {
     const { t } = useTranslation()
     const { claimLightningAddress } = useWallet()
@@ -18,12 +17,12 @@ export const LightningAddressSetup = ({ onDone }: { onDone: () => void }) => {
     const [claiming, setClaiming] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const claim = async (automatic: boolean) => {
+    const claim = async () => {
         if (claiming) return
         haptics.impact()
         setClaiming(true)
         setError(null)
-        const result = await claimLightningAddress(automatic ? undefined : username)
+        const result = await claimLightningAddress(username)
         setClaiming(false)
         if (result === 'registered') {
             haptics.success()
@@ -65,11 +64,8 @@ export const LightningAddressSetup = ({ onDone }: { onDone: () => void }) => {
                 placeholder={t('wallet.receive.customizeAddress.placeholder')}
             />
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="button" className="w-full" disabled={claiming} onClick={() => void claim(false)}>
+            <Button type="button" className="w-full" disabled={claiming} onClick={() => void claim()}>
                 {claiming ? t('wallet.receive.customizeAddress.claiming') : t('wallet.receive.customizeAddress.claimButton')}
-            </Button>
-            <Button type="button" variant="outline" className="w-full" disabled={claiming} onClick={() => void claim(true)}>
-                {t('walletSecure.useAutomaticAddress')}
             </Button>
         </div>
     )

@@ -130,7 +130,6 @@ export const NostrProfilePanel = () => {
                     <Row label={t('wallet.settings.nostr.lightningAddress')} value={profile.lightningAddress ?? profile.lud16} />
                     <Row label={t('wallet.settings.nostr.lnurl')} value={profile.lnurl} mono />
                     <Row label={t('wallet.settings.nostr.btcAddress')} value={profile.btcAddress} mono />
-                    <Row label={t('wallet.settings.nostr.taprootAddress')} value={profile.taprootAddress} mono />
                     <div className="flex items-center justify-between gap-3 py-2">
                         <span className="text-xs text-gray-400">{t('wallet.settings.nostr.updated')}</span>
                         <span className="text-sm text-gray-900">

@@ -12,7 +12,6 @@ import {
 } from '@breeztech/breez-sdk-spark/web'
 import { toast } from 'sonner';
 import { t } from 'i18next';
-import { generateChildKey, generateTapRootAddress } from '@/helpers/crypto';
 import { isSupportedCurrency } from '@/lib/wallet/api';
 import { openWallet, sealWallet } from '@/lib/wallet/passkey';
 import {
@@ -62,7 +61,7 @@ export type WalletContextType = {
     recoverWalletWithPasskey: (options?: { password?: string }) => Promise<void>
     breezSdk: BreezSdk | undefined;
     getLnUrl: (breezSdk: BreezSdk) => Promise<string | null>
-    claimLightningAddress: (username?: string) => Promise<LightningAddressClaimResult>
+    claimLightningAddress: (username: string) => Promise<LightningAddressClaimResult>
     getBtcAddress: (breezSdk: BreezSdk) => Promise<string | null>,
     currency: string,
     changeCurrency: (currency: string) => void,
@@ -303,9 +302,9 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     }
 
     // Wallets created before Lightning address registration (or restored
-    // without the onboarding step) may not have one yet. Prefer the Telegram
-    // username so the address is easy to share, then fall back to the same
-    // deterministic username used during onboarding so Receive always works.
+    // without the onboarding step) may not have one yet. Claim the Telegram
+    // username so the address is easy to share, and migrate legacy wallets
+    // whose username is the derived taproot address.
     const resolveLightningAddress = async (breezSdk: BreezSdk) => {
         // The SDK can take a moment to load a previously registered address
         // after connecting. Avoid replacing it with a new one too eagerly.
@@ -314,50 +313,48 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
             await new Promise<void>(resolve => setTimeout(resolve, 300))
             current = await breezSdk.getLightningAddress()
         }
+
+        const telegramUsername = getTelegramUsername()?.toLowerCase()
+        const currentUsername = current?.lightningAddress?.split('@')[0]
+
+        // Legacy wallets registered their taproot address as the username.
+        // Migrate them to the Telegram username when it is claimable.
+        if (current?.lnurl?.url && telegramUsername && currentUsername && currentUsername.startsWith('bc1p')) {
+            try {
+                const request = { username: telegramUsername }
+                if (await breezSdk.checkLightningAddressAvailable(request)) {
+                    const migrated = await breezSdk.registerLightningAddress(request)
+                    if (migrated?.lightningAddress) {
+                        return migrated
+                    }
+                }
+            } catch (error) {
+                console.warn('Unable to migrate the Lightning address to the Telegram username:', error)
+            }
+            return current
+        }
+
         if (current?.lnurl?.url) {
             return current
         }
 
-        const mnemonic = getSessionMnemonic()
-        if (!mnemonic) {
+        if (!telegramUsername) {
             return current ?? null
         }
 
-        // Try the Telegram username first (e.g. wallets restored without the
-        // onboarding step). If it is taken — possibly by this same wallet on
-        // another device — the existing address is returned below.
-        const telegramUsername = getTelegramUsername()?.toLowerCase()
-        if (telegramUsername) {
-            try {
-                const request = { username: telegramUsername }
-                if (await breezSdk.checkLightningAddressAvailable(request)) {
-                    return await breezSdk.registerLightningAddress(request)
-                }
-            } catch (error) {
-                console.warn('Unable to register the Telegram Lightning address:', error)
-            }
-        }
-
+        // Try to claim the Telegram username. If it is taken — possibly by
+        // this same wallet on another device — the existing address is
+        // returned below.
         try {
-            const childKey = await generateChildKey(mnemonic)
-            if (!childKey.publicKey) {
-                return current ?? null
-            }
-            const tapRootAddress = await generateTapRootAddress(childKey.publicKey)
-            if (!tapRootAddress) {
-                return current ?? null
-            }
-
-            const request = { username: tapRootAddress }
-            const available = await breezSdk.checkLightningAddressAvailable(request)
-            if (available) {
+            const request = { username: telegramUsername }
+            if (await breezSdk.checkLightningAddressAvailable(request)) {
                 return await breezSdk.registerLightningAddress(request)
             }
-            return (await breezSdk.getLightningAddress()) ?? current ?? null
         } catch (error) {
-            console.warn('Unable to register the Lightning address:', error)
-            return current ?? null
+            console.warn('Unable to register the Telegram Lightning address:', error)
         }
+
+        return (await breezSdk.getLightningAddress()) ?? current ?? null
     }
 
     const getLnUrl = async (breezSdk: BreezSdk) => {
@@ -386,34 +383,16 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
     }
 
     // Claims a Lightning address username on demand (Receive page
-    // customization). Without a username it claims the deterministic taproot
-    // address. Updates the cached address and re-publishes the Nostr profile
-    // so the new address becomes discoverable.
-    const claimLightningAddress = async (username?: string): Promise<LightningAddressClaimResult> => {
+    // customization). Updates the cached address and re-publishes the Nostr
+    // profile so the new address becomes discoverable.
+    const claimLightningAddress = async (username: string): Promise<LightningAddressClaimResult> => {
         if (!breezSdk) {
             return 'failed'
         }
 
-        let target: string
-        if (username === undefined) {
-            const mnemonic = getSessionMnemonic()
-            if (!mnemonic) return 'failed'
-            try {
-                const childKey = await generateChildKey(mnemonic)
-                const tapRootAddress = childKey.publicKey
-                    ? await generateTapRootAddress(childKey.publicKey)
-                    : null
-                if (!tapRootAddress) return 'failed'
-                target = tapRootAddress
-            } catch (error) {
-                console.warn('Unable to derive the automatic Lightning address:', error)
-                return 'failed'
-            }
-        } else {
-            target = username.trim().toLowerCase()
-            if (!LIGHTNING_USERNAME_PATTERN.test(target)) {
-                return 'invalid'
-            }
+        const target = username.trim().toLowerCase()
+        if (!LIGHTNING_USERNAME_PATTERN.test(target)) {
+            return 'invalid'
         }
 
         try {

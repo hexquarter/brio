@@ -1,7 +1,7 @@
 import type { BreezSdk } from '@breeztech/breez-sdk-spark/web'
 import { nip19 } from 'nostr-tools'
 import { retrieveRawInitData } from '@telegram-apps/sdk-react'
-import { generateChildKey, generateTapRootAddress, hash } from '@/helpers/crypto'
+import { hash } from '@/helpers/crypto'
 import { verifyProfile } from '@/lib/wallet/api'
 import {
   getProfileOverrides,
@@ -85,12 +85,6 @@ export const publishAndVerifyProfile = async (
     throw new Error('A Lightning address is required to publish the wallet profile.')
   }
 
-  const childKey = await generateChildKey(mnemonic)
-  if (!childKey.publicKey) {
-    throw new Error('Cannot retrieve Bitcoin public key.')
-  }
-  const tapRootAddress = await generateTapRootAddress(childKey.publicKey)
-
   const contacts = [await hash(telegramUsername.toLowerCase())]
   // Identity fields imported from Nostr (or passed in directly) take
   // precedence over the Telegram defaults.
@@ -105,8 +99,7 @@ export const publishAndVerifyProfile = async (
     lud16: lightningAddress.lightningAddress,
     lightningAddress: lightningAddress.lightningAddress,
     lnurl: lightningAddress.lnurl.url,
-    btcAddress,
-    taprootAddress: tapRootAddress
+    btcAddress
   }, contacts)
 
   const response = await verifyProfile({
