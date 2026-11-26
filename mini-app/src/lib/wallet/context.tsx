@@ -34,7 +34,7 @@ import {
 import { clearSecureExport } from '@/lib/wallet/backup';
 import { clearContacts } from '@/lib/wallet/contact';
 import { clearNostrIdentity } from '@/lib/nostr/identity';
-import { publishAndVerifyProfile } from '@/lib/nostr/profile';
+import { publishAndVerifyProfile, detectExistingNostrProfile } from '@/lib/nostr/profile';
 import { getTelegramUsername } from '@/lib/telegram/username';
 import {
     clearProfileOverrides,
@@ -43,6 +43,11 @@ import {
     getSessionMnemonic,
     isProfileSynced,
     storeSessionMnemonic
+} from '@/lib/wallet/session';
+import {
+    clearDismissedProfileEventId,
+    clearFoundProfile,
+    setFoundProfile
 } from '@/lib/wallet/session';
 
 export { getSessionMnemonic, storeSessionMnemonic } from '@/lib/wallet/session';
@@ -240,6 +245,8 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         }
         clearProfileSynced()
         clearProfileOverrides()
+        clearFoundProfile()
+        clearDismissedProfileEventId()
         clearContacts()
         clearSessionMnemonic()
         clearNostrIdentity()
@@ -293,6 +300,8 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         sessionStorage.removeItem(WALLET_BTC_ADDRESS)
         clearProfileSynced()
         clearProfileOverrides()
+        clearFoundProfile()
+        clearDismissedProfileEventId()
         clearContacts()
         clearSecureExport()
         storeSessionMnemonic(mnemonic)
@@ -481,6 +490,14 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
             await resolveLightningAddress(sdk)
             const address = await getBtcAddress(sdk)
             if (!address) {
+                return
+            }
+            // Friendly linking: if the derived key already has a profile with
+            // different identity fields (e.g. after a restore), surface the
+            // choice in Settings instead of silently overwriting it.
+            const existing = await detectExistingNostrProfile(mnemonic)
+            if (existing) {
+                setFoundProfile(existing)
                 return
             }
             await publishAndVerifyProfile(mnemonic, sdk, address)

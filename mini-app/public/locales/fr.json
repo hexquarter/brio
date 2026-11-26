@@ -232,5 +232,21 @@
     "wallet.receive.customizeAddress.success": "Adresse Lightning réclamée !",
     "wallet.receive.customizeAddress.failed": "Impossible de réclamer l'adresse Lightning. Veuillez réessayer.",
     "wallet.receive.customizeAddressButton": "Personnaliser",
-    "wallet.settings.nostr.nip05": "Identifiant NIP-05"
+    "wallet.settings.nostr.nip05": "Identifiant NIP-05",
+    "wallet.settings.nostr.foundTitle": "Profil précédent trouvé",
+    "wallet.settings.nostr.foundDescription": "Nous avons trouvé un profil Brio sur Nostr avec des détails différents. L'importer plutôt que de l'écraser ?",
+    "wallet.settings.nostr.importIt": "Importer",
+    "wallet.settings.nostr.startFresh": "Repartir de zéro",
+    "wallet.settings.nostr.freshSuccess": "Nouveau profil publié.",
+    "wallet.settings.nostr.connectTitle": "Connecter un profil Nostr existant",
+    "wallet.settings.nostr.connectDescription": "Collez votre npub pour emprunter son nom et sa photo pour vos paiements. Aucune clé secrète nécessaire — votre adresse Lightning reste la même.",
+    "wallet.settings.nostr.connectFetch": "Récupérer le profil",
+    "wallet.settings.nostr.connectFetching": "Récupération du profil...",
+    "wallet.settings.nostr.connectLink": "Lier le profil",
+    "wallet.settings.nostr.connectCancel": "Annuler",
+    "wallet.settings.nostr.connectInvalidKey": "Clé publique Nostr invalide. Collez un npub, nprofile ou une clé hex.",
+    "wallet.settings.nostr.connectNotFound": "Aucun profil trouvé sur les relais pour cette clé. Publiez d'abord un profil depuis votre client Nostr.",
+    "wallet.settings.nostr.linking": "Liaison...",
+    "wallet.settings.nostr.linkSuccess": "Profil Nostr lié.",
+    "wallet.settings.nostr.linkFailed": "Impossible de lier le profil Nostr : {{reason}}"
 }

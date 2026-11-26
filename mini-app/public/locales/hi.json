@@ -232,5 +232,21 @@
     "wallet.receive.customizeAddress.success": "लाइटनिंग पता क्लेम हो गया!",
     "wallet.receive.customizeAddress.failed": "लाइटनिंग पता क्लेम नहीं हो सका। कृपया पुनः प्रयास करें।",
     "wallet.receive.customizeAddressButton": "कस्टमाइज़ करें",
-    "wallet.settings.nostr.nip05": "NIP-05 पहचानकर्ता"
+    "wallet.settings.nostr.nip05": "NIP-05 पहचानकर्ता",
+    "wallet.settings.nostr.foundTitle": "पिछली प्रोफ़ाइल मिली",
+    "wallet.settings.nostr.foundDescription": "हमें Nostr पर अलग विवरण वाली एक Brio प्रोफ़ाइल मिली। इसे ओवरराइट करने के बजाय आयात करें?",
+    "wallet.settings.nostr.importIt": "आयात करें",
+    "wallet.settings.nostr.startFresh": "नए सिरे से शुरू करें",
+    "wallet.settings.nostr.freshSuccess": "नई प्रोफ़ाइल प्रकाशित हो गई।",
+    "wallet.settings.nostr.connectTitle": "मौजूदा Nostr प्रोफ़ाइल कनेक्ट करें",
+    "wallet.settings.nostr.connectDescription": "भुगतान में उसका नाम और तस्वीर इस्तेमाल करने के लिए अपना npub पेस्ट करें। किसी गुप्त कुंजी की ज़रूरत नहीं — आपका लाइटनिंग पता वैसा ही रहेगा।",
+    "wallet.settings.nostr.connectFetch": "प्रोफ़ाइल लाएँ",
+    "wallet.settings.nostr.connectFetching": "प्रोफ़ाइल लाई जा रही है...",
+    "wallet.settings.nostr.connectLink": "प्रोफ़ाइल लिंक करें",
+    "wallet.settings.nostr.connectCancel": "रद्द करें",
+    "wallet.settings.nostr.connectInvalidKey": "अमान्य Nostr सार्वजनिक कुंजी। npub, nprofile या hex कुंजी पेस्ट करें।",
+    "wallet.settings.nostr.connectNotFound": "इस कुंजी के लिए रिले पर कोई प्रोफ़ाइल नहीं मिली। पहले अपने Nostr क्लाइंट से प्रोफ़ाइल प्रकाशित करें।",
+    "wallet.settings.nostr.linking": "लिंक हो रहा है...",
+    "wallet.settings.nostr.linkSuccess": "Nostr प्रोफ़ाइल लिंक हो गई।",
+    "wallet.settings.nostr.linkFailed": "Nostr प्रोफ़ाइल लिंक नहीं हो सकी: {{reason}}"
 }

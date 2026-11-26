@@ -4,9 +4,12 @@ import { retrieveRawInitData } from '@telegram-apps/sdk-react'
 import { hash } from '@/helpers/crypto'
 import { fetchBotInfo, registerPaymentWebhook, rpcEndpoint, verifyProfile, type RegisterWebhookResponse } from '@/lib/wallet/api'
 import {
+  clearFoundProfile,
+  getDismissedProfileEventId,
   getProfileOverrides,
   markProfileSynced,
   storeProfileOverrides,
+  type FoundProfile,
   type ProfileOverrides
 } from '@/lib/wallet/session'
 import { publishProfile, fetchNostrProfile, publishBadgeAcceptance, getNostrConfig } from './client'
@@ -27,6 +30,83 @@ export const fetchOwnNostrProfile = async (mnemonic: string): Promise<OwnNostrPr
     publicKey: identity.publicKey,
     fetched: await fetchNostrProfile(identity.publicKey)
   }
+}
+
+// Accepts an npub, an nprofile, or a raw 64-char hex public key.
+export const resolveNostrPublicKeyInput = (input: string): string | null => {
+  const value = input.trim()
+  if (/^[0-9a-f]{64}$/i.test(value)) return value.toLowerCase()
+  try {
+    const decoded = nip19.decode(value)
+    if (decoded.type === 'npub') return decoded.data as string
+    if (decoded.type === 'nprofile') return (decoded.data as { pubkey: string }).pubkey
+  } catch {
+    // Not a valid Nostr identifier.
+  }
+  return null
+}
+
+/**
+ * Detects a previous profile on the relays whose identity fields differ from
+ * what this wallet would publish (e.g. after a restore). Returns the found
+ * profile reference so the UI can offer to import it instead of overwriting.
+ */
+export const detectExistingNostrProfile = async (mnemonic: string): Promise<FoundProfile | null> => {
+  try {
+    const own = await fetchOwnNostrProfile(mnemonic)
+    const fetched = own.fetched
+    if (!fetched || fetched.eventId === getDismissedProfileEventId()) return null
+
+    const telegramUsername = getTelegramUsername()?.toLowerCase()
+    const stored = getProfileOverrides()
+    const expectedName = stored.name ?? telegramUsername ?? ''
+    const expectedDisplayName = stored.display_name ?? telegramUsername ?? ''
+    const expectedAbout = stored.about ?? 'Brio Bitcoin wallet'
+    const differs =
+      (!!fetched.profile.name && fetched.profile.name !== expectedName) ||
+      (!!fetched.profile.display_name && fetched.profile.display_name !== expectedDisplayName) ||
+      (!!fetched.profile.about && fetched.profile.about !== expectedAbout)
+    return differs ? { eventId: fetched.eventId, createdAt: fetched.createdAt } : null
+  } catch (error) {
+    console.warn('Unable to check for an existing Nostr profile:', error)
+    return null
+  }
+}
+
+/**
+ * Links an existing Nostr profile by npub: imports its identity fields
+ * (name, display name, about) as overrides and republishes the wallet
+ * profile with them. Payments keep flowing through the wallet's own
+ * Lightning address; no secret key is involved.
+ */
+export const linkExistingNostrProfile = async (
+  mnemonic: string,
+  sdk: BreezSdk,
+  btcAddress: string,
+  keyInput: string
+) => {
+  const publicKey = resolveNostrPublicKeyInput(keyInput)
+  if (!publicKey) {
+    throw new Error('Invalid Nostr public key. Paste an npub, nprofile or hex key.')
+  }
+
+  const fetched = await fetchNostrProfile(publicKey)
+  if (!fetched) {
+    throw new Error('No profile was found on the relays for this key. Publish a profile from your Nostr client first.')
+  }
+  if (!fetched.profile.name && !fetched.profile.display_name && !fetched.profile.about) {
+    throw new Error('This profile has no name or description to import.')
+  }
+
+  const overrides: ProfileOverrides = {
+    name: fetched.profile.name,
+    display_name: fetched.profile.display_name,
+    about: fetched.profile.about
+  }
+  storeProfileOverrides(overrides)
+
+  const event = await publishAndVerifyProfile(mnemonic, sdk, btcAddress, overrides)
+  return { event, npub: nip19.npubEncode(publicKey), imported: fetched.profile }
 }
 
 /**
@@ -119,6 +199,7 @@ export const publishAndVerifyProfile = async (
   if (!response.ok) throw new Error(JSON.stringify(await response.json()))
 
   markProfileSynced()
+  clearFoundProfile()
 
   // Best-effort extras: badge acceptance and offline-payment webhooks must
   // never fail the profile sync itself.

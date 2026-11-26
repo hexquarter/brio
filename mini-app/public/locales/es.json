@@ -232,5 +232,21 @@
     "wallet.receive.customizeAddress.success": "¡Dirección Lightning reclamada!",
     "wallet.receive.customizeAddress.failed": "No se pudo reclamar la dirección Lightning. Inténtalo de nuevo.",
     "wallet.receive.customizeAddressButton": "Personalizar",
-    "wallet.settings.nostr.nip05": "Identificador NIP-05"
+    "wallet.settings.nostr.nip05": "Identificador NIP-05",
+    "wallet.settings.nostr.foundTitle": "Perfil anterior encontrado",
+    "wallet.settings.nostr.foundDescription": "Encontramos un perfil Brio en Nostr con detalles diferentes. ¿Importarlo en lugar de sobrescribirlo?",
+    "wallet.settings.nostr.importIt": "Importarlo",
+    "wallet.settings.nostr.startFresh": "Empezar de cero",
+    "wallet.settings.nostr.freshSuccess": "Perfil nuevo publicado.",
+    "wallet.settings.nostr.connectTitle": "Conectar un perfil Nostr existente",
+    "wallet.settings.nostr.connectDescription": "Pega tu npub para usar su nombre y foto en tus pagos. No se necesita clave secreta — tu dirección Lightning sigue igual.",
+    "wallet.settings.nostr.connectFetch": "Obtener perfil",
+    "wallet.settings.nostr.connectFetching": "Obteniendo perfil...",
+    "wallet.settings.nostr.connectLink": "Vincular perfil",
+    "wallet.settings.nostr.connectCancel": "Cancelar",
+    "wallet.settings.nostr.connectInvalidKey": "Clé pública Nostr inválida. Pega un npub, nprofile o clave hex.",
+    "wallet.settings.nostr.connectNotFound": "No se encontró ningún perfil en los relés para esta clave. Publica primero un perfil desde tu cliente Nostr.",
+    "wallet.settings.nostr.linking": "Vinculando...",
+    "wallet.settings.nostr.linkSuccess": "Perfil Nostr vinculado.",
+    "wallet.settings.nostr.linkFailed": "No se pudo vincular el perfil Nostr: {{reason}}"
 }

@@ -232,5 +232,21 @@
     "wallet.receive.customizeAddress.success": "闪电地址认领成功！",
     "wallet.receive.customizeAddress.failed": "无法认领闪电地址，请重试。",
     "wallet.receive.customizeAddressButton": "自定义",
-    "wallet.settings.nostr.nip05": "NIP-05 标识"
+    "wallet.settings.nostr.nip05": "NIP-05 标识",
+    "wallet.settings.nostr.foundTitle": "发现之前的个人资料",
+    "wallet.settings.nostr.foundDescription": "我们在 Nostr 上发现了一个信息不同的 Brio 个人资料。要导入它而不是覆盖吗？",
+    "wallet.settings.nostr.importIt": "导入",
+    "wallet.settings.nostr.startFresh": "重新开始",
+    "wallet.settings.nostr.freshSuccess": "已发布全新资料。",
+    "wallet.settings.nostr.connectTitle": "连接现有的 Nostr 资料",
+    "wallet.settings.nostr.connectDescription": "粘贴您的 npub，即可在收款时借用其名称和头像。无需密钥——您的闪电地址保持不变。",
+    "wallet.settings.nostr.connectFetch": "获取资料",
+    "wallet.settings.nostr.connectFetching": "正在获取资料...",
+    "wallet.settings.nostr.connectLink": "关联资料",
+    "wallet.settings.nostr.connectCancel": "取消",
+    "wallet.settings.nostr.connectInvalidKey": "无效的 Nostr 公钥。请粘贴 npub、nprofile 或十六进制密钥。",
+    "wallet.settings.nostr.connectNotFound": "在中继上未找到此密钥的资料。请先从您的 Nostr 客户端发布资料。",
+    "wallet.settings.nostr.linking": "关联中...",
+    "wallet.settings.nostr.linkSuccess": "Nostr 资料已关联。",
+    "wallet.settings.nostr.linkFailed": "无法关联 Nostr 资料：{{reason}}"
 }
