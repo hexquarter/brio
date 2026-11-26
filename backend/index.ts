@@ -6,6 +6,8 @@ import { handleTelegramWebhook } from './bot/webhook.js'
 import { handleSparkWebhook } from './webhooks/sparkWebhook.js'
 import { handleScheduled } from './webhooks/l1Cron.js'
 import { handleNip05 } from './nip05.js'
+import { handleResolve } from './resolve.js'
+import { handleLnurlPay, handleLnurlVerify, handleApiV2, pollNpubcashQuotes } from './npubcash.js'
 import { badgeInfoResponse, badgeSvgResponse } from './badge.js'
 
 export default {
@@ -47,6 +49,23 @@ export default {
         return withCors(await handleNip05(request, env))
       }
 
+      // Telegram <-> Nostr resolver: payment + identity info both ways.
+      if (request.method === 'GET' && url.pathname.startsWith('/resolve/')) {
+        return withCors(await handleResolve(request, env))
+      }
+
+      // npubcash: Nostr-native inbound rail (npub1…@domain Lightning
+      // addresses backed by Cashu mint quotes).
+      if (request.method === 'GET' && url.pathname.startsWith('/.well-known/lnurlp/')) {
+        return withCors(await handleLnurlPay(request, env))
+      }
+      if (request.method === 'GET' && url.pathname.startsWith('/lnurl/verify/')) {
+        return withCors(await handleLnurlVerify(request, env))
+      }
+      if (url.pathname.startsWith('/api/v2/')) {
+        return withCors(await handleApiV2(request, env))
+      }
+
       // NIP-58 badge assets.
       if (request.method === 'GET' && url.pathname === '/badge/brio-verified.svg') {
         return badgeSvgResponse()
@@ -63,12 +82,18 @@ export default {
   },
 
   // L1 deposit notifications: poll watched Bitcoin addresses via
-  // mempool.space and DM the wallet owner on Telegram.
+  // mempool.space and DM the wallet owner on Telegram. Also refreshes the
+  // npubcash quote states (and publishes settled zap receipts).
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
       await handleScheduled(env)
     } catch (error) {
       console.error('Scheduled L1 poll failed:', error)
+    }
+    try {
+      await pollNpubcashQuotes(env)
+    } catch (error) {
+      console.error('Scheduled npubcash poll failed:', error)
     }
   }
 } satisfies ExportedHandler<Env>

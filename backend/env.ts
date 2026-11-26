@@ -3,6 +3,8 @@ export interface Env {
   NOSTR_PRIVATE_KEY: string
   NOSTR_RELAYS: string
   BOT_USERNAME?: string
+  // Cashu mint backing the npubcash inbound rail. Defaults to a public mint.
+  CASHU_MINT_URL?: string
   TELEGRAM_WEBHOOK_SECRET?: string
   ENVIRONMENT?: string
   ALLOW_UNVERIFIED_TELEGRAM_DEV?: string

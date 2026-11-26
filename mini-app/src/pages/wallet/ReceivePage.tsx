@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { haptics } from '@/lib/telegram/ui';
 import { cn } from '@/lib/utils';
 import { LightningAddressSetup } from '@/components/wallet/LightningAddressSetup';
+import { NostrReceive } from '@/components/wallet/NostrReceive';
 
 type ReceiveError = 'unavailable' | 'failed' | null
 
@@ -206,6 +207,7 @@ export const WalletReceivePage : React.FC = () => {
                 <TabsList>
                     <TabsTrigger value="lightning">{t('wallet.receive.lightningTitle')}</TabsTrigger>
                     <TabsTrigger value="btc">{t('wallet.receive.btcTitle')}</TabsTrigger>
+                    <TabsTrigger value="nostr">{t('wallet.receive.nostrTab')}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="lightning">
@@ -251,6 +253,10 @@ export const WalletReceivePage : React.FC = () => {
                         () => void copyBitcoinAddress(),
                         () => void shareBitcoinAddress()
                     )}
+                </TabsContent>
+
+                <TabsContent value="nostr">
+                    <NostrReceive />
                 </TabsContent>
             </Tabs>
         </div>
