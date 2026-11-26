@@ -224,5 +224,13 @@
     "wallet.settings.nostr.importSuccess": "Nostr profile imported.",
     "wallet.settings.nostr.importSkipped": "Profile import is only available inside Telegram.",
     "wallet.settings.nostr.importFailed": "Unable to import the Nostr profile: {{reason}}",
-    "wallet.settings.nostr.walletUnavailable": "The wallet is not ready yet. Try again in a moment."
+    "wallet.settings.nostr.walletUnavailable": "The wallet is not ready yet. Try again in a moment.",
+    "wallet.receive.customizeAddress.title": "Set up your Lightning address",
+    "wallet.receive.customizeAddress.description": "Choose your username to receive payments at yourname@yourdomain.",
+    "wallet.receive.customizeAddress.placeholder": "yourname",
+    "wallet.receive.customizeAddress.claimButton": "Claim address",
+    "wallet.receive.customizeAddress.claiming": "Claiming...",
+    "wallet.receive.customizeAddress.success": "Lightning address claimed!",
+    "wallet.receive.customizeAddress.failed": "Unable to claim the Lightning address. Please try again.",
+    "wallet.receive.customizeAddressButton": "Customize"
 }

@@ -225,5 +225,13 @@
     "wallet.settings.nostr.importSuccess": "已导入 Nostr 个人资料。",
     "wallet.settings.nostr.importSkipped": "个人资料导入仅在 Telegram 内可用。",
     "wallet.settings.nostr.importFailed": "无法导入 Nostr 个人资料：{{reason}}",
-    "wallet.settings.nostr.walletUnavailable": "钱包尚未就绪，请稍后重试。"
+    "wallet.settings.nostr.walletUnavailable": "钱包尚未就绪，请稍后重试。",
+    "wallet.receive.customizeAddress.title": "设置您的闪电地址",
+    "wallet.receive.customizeAddress.description": "选择您的用户名，即可通过 yourname@yourdomain 收款。",
+    "wallet.receive.customizeAddress.placeholder": "用户名",
+    "wallet.receive.customizeAddress.claimButton": "认领地址",
+    "wallet.receive.customizeAddress.claiming": "认领中...",
+    "wallet.receive.customizeAddress.success": "闪电地址认领成功！",
+    "wallet.receive.customizeAddress.failed": "无法认领闪电地址，请重试。",
+    "wallet.receive.customizeAddressButton": "自定义"
 }

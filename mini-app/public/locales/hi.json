@@ -225,5 +225,13 @@
     "wallet.settings.nostr.importSuccess": "Nostr प्रोफ़ाइल आयात हो गई।",
     "wallet.settings.nostr.importSkipped": "प्रोफ़ाइल आयात केवल Telegram के अंदर उपलब्ध है।",
     "wallet.settings.nostr.importFailed": "Nostr प्रोफ़ाइल आयात नहीं हो सकी: {{reason}}",
-    "wallet.settings.nostr.walletUnavailable": "वॉलेट अभी तैयार नहीं है। कुछ देर बाद पुनः प्रयास करें।"
+    "wallet.settings.nostr.walletUnavailable": "वॉलेट अभी तैयार नहीं है। कुछ देर बाद पुनः प्रयास करें।",
+    "wallet.receive.customizeAddress.title": "अपना लाइटनिंग पता सेट करें",
+    "wallet.receive.customizeAddress.description": "yourname@yourdomain पर भुगतान पाने के लिए अपना उपयोगकर्ता नाम चुनें।",
+    "wallet.receive.customizeAddress.placeholder": "उपयोगकर्ता नाम",
+    "wallet.receive.customizeAddress.claimButton": "पता क्लेम करें",
+    "wallet.receive.customizeAddress.claiming": "क्लेम हो रहा है...",
+    "wallet.receive.customizeAddress.success": "लाइटनिंग पता क्लेम हो गया!",
+    "wallet.receive.customizeAddress.failed": "लाइटनिंग पता क्लेम नहीं हो सका। कृपया पुनः प्रयास करें।",
+    "wallet.receive.customizeAddressButton": "कस्टमाइज़ करें"
 }

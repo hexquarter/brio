@@ -1,6 +1,6 @@
 import { Page } from "@/components/Page";
 import { Button } from "@/components/ui/button";
-import { getSessionMnemonic, useWallet } from "@/lib/wallet/context";
+import { getSessionMnemonic, useWallet, LIGHTNING_USERNAME_PATTERN } from "@/lib/wallet/context";
 import { useRef, useState } from "react";
 
 import { useTranslation } from "react-i18next";
@@ -25,8 +25,6 @@ import { haptics } from "@/lib/telegram/ui";
 type LnAddressInfo = Awaited<ReturnType<BreezSdk['getLightningAddress']>>
 
 type UsernameChoice = { username?: string; useAutomatic?: boolean }
-
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
 export function SecureWalletPage() {
     const wallet = useWallet()
@@ -197,7 +195,7 @@ export function SecureWalletPage() {
             }
 
             const username = choice.username?.trim().toLowerCase() ?? ''
-            if (!USERNAME_PATTERN.test(username)) {
+            if (!LIGHTNING_USERNAME_PATTERN.test(username)) {
                 haptics.error()
                 setUsernameError(t('walletSecure.usernameInvalid'))
                 continue

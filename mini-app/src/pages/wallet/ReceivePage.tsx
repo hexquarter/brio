@@ -12,6 +12,7 @@ import { fetchBotInfo } from '@/lib/wallet/api';
 import { Button } from '@/components/ui/button';
 import { haptics } from '@/lib/telegram/ui';
 import { cn } from '@/lib/utils';
+import { LightningAddressSetup } from '@/components/wallet/LightningAddressSetup';
 
 type ReceiveError = 'unavailable' | 'failed' | null
 
@@ -27,6 +28,7 @@ export const WalletReceivePage : React.FC = () => {
     const [btcError, setBtcError] = useState<ReceiveError>(null)
     const [lnReloadKey, setLnReloadKey] = useState(0)
     const [btcReloadKey, setBtcReloadKey] = useState(0)
+    const [customizeOpen, setCustomizeOpen] = useState(false)
 
     // Load the Lightning address and the Bitcoin address independently. The
     // Bitcoin address can be slow or fail while the Lightning QR is already
@@ -135,11 +137,6 @@ export const WalletReceivePage : React.FC = () => {
         )
     }
 
-    const retryLightning = () => {
-        haptics.selection()
-        setLnReloadKey(key => key + 1)
-    }
-
     const retryBitcoin = () => {
         haptics.selection()
         setBtcReloadKey(key => key + 1)
@@ -213,12 +210,35 @@ export const WalletReceivePage : React.FC = () => {
 
                 <TabsContent value="lightning">
                     {lnLoading && loadingCard}
-                    {!lnLoading && lnError && errorCard(lnError, retryLightning)}
-                    {!lnLoading && !lnError && lnURL && addressCard(
-                        lnURL,
-                        t('wallet.receive.lightningOffer'),
-                        () => void copyLightningAddress(),
-                        () => void shareLightningAddress()
+                    {!lnLoading && lnError && (
+                        <LightningAddressSetup onDone={() => setLnReloadKey(key => key + 1)} />
+                    )}
+                    {!lnLoading && !lnError && lnURL && (
+                        <div className="flex flex-col items-center gap-2">
+                            {addressCard(
+                                lnURL,
+                                t('wallet.receive.lightningOffer'),
+                                () => void copyLightningAddress(),
+                                () => void shareLightningAddress()
+                            )}
+                            {customizeOpen ? (
+                                <LightningAddressSetup onDone={() => {
+                                    setCustomizeOpen(false)
+                                    setLnReloadKey(key => key + 1)
+                                }} />
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="text-xs text-gray-400 underline-offset-2 hover:underline"
+                                    onClick={() => {
+                                        haptics.selection()
+                                        setCustomizeOpen(true)
+                                    }}
+                                >
+                                    {t('wallet.receive.customizeAddressButton')}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </TabsContent>
 

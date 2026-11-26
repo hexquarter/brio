@@ -48,6 +48,11 @@ import {
 
 export { getSessionMnemonic, storeSessionMnemonic } from '@/lib/wallet/session';
 
+export type LightningAddressClaimResult = 'registered' | 'taken' | 'invalid' | 'failed'
+
+// Allowed username for a Lightning address (user@domain).
+export const LIGHTNING_USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
+
 export type WalletContextType = {
     walletExists: boolean;
     loadSdk: (mnemonic: string) => Promise<BreezSdk | null>
@@ -57,6 +62,7 @@ export type WalletContextType = {
     recoverWalletWithPasskey: (options?: { password?: string }) => Promise<void>
     breezSdk: BreezSdk | undefined;
     getLnUrl: (breezSdk: BreezSdk) => Promise<string | null>
+    claimLightningAddress: (username?: string) => Promise<LightningAddressClaimResult>
     getBtcAddress: (breezSdk: BreezSdk) => Promise<string | null>,
     currency: string,
     changeCurrency: (currency: string) => void,
@@ -368,13 +374,98 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         }
 
         const info = await resolveLightningAddress(breezSdk)
-        const address = info?.lnurl?.url ?? info?.lightningAddress
+        // Prefer the human-readable Lightning address (user@domain) over the
+        // LNURL-pay endpoint URL, which is not user-friendly to share.
+        const address = info?.lightningAddress ?? info?.lnurl?.url
         if (address) {
             setLnUrl(address)
             sessionStorage.setItem(WALLET_LN_URL, address)
             return address
         }
         return null
+    }
+
+    // Claims a Lightning address username on demand (Receive page
+    // customization). Without a username it claims the deterministic taproot
+    // address. Updates the cached address and re-publishes the Nostr profile
+    // so the new address becomes discoverable.
+    const claimLightningAddress = async (username?: string): Promise<LightningAddressClaimResult> => {
+        if (!breezSdk) {
+            return 'failed'
+        }
+
+        let target: string
+        if (username === undefined) {
+            const mnemonic = getSessionMnemonic()
+            if (!mnemonic) return 'failed'
+            try {
+                const childKey = await generateChildKey(mnemonic)
+                const tapRootAddress = childKey.publicKey
+                    ? await generateTapRootAddress(childKey.publicKey)
+                    : null
+                if (!tapRootAddress) return 'failed'
+                target = tapRootAddress
+            } catch (error) {
+                console.warn('Unable to derive the automatic Lightning address:', error)
+                return 'failed'
+            }
+        } else {
+            target = username.trim().toLowerCase()
+            if (!LIGHTNING_USERNAME_PATTERN.test(target)) {
+                return 'invalid'
+            }
+        }
+
+        try {
+            const request = { username: target }
+            if (!(await breezSdk.checkLightningAddressAvailable(request))) {
+                // The username may already belong to this wallet, e.g. when it
+                // was claimed on another device.
+                const existing = await breezSdk.getLightningAddress()
+                if (existing?.lightningAddress?.split('@')[0] === target) {
+                    rememberLightningAddress(existing)
+                    return 'registered'
+                }
+                return 'taken'
+            }
+
+            await breezSdk.registerLightningAddress(request)
+
+            // The SDK can take a moment to expose the freshly registered address.
+            let info = await breezSdk.getLightningAddress()
+            for (let attempt = 0; !info?.lightningAddress && attempt < 3; attempt++) {
+                await new Promise<void>(resolve => setTimeout(resolve, 300))
+                info = await breezSdk.getLightningAddress()
+            }
+            if (!info?.lightningAddress) {
+                return 'failed'
+            }
+            rememberLightningAddress(info)
+
+            // Best-effort: make the new address discoverable again.
+            const mnemonic = getSessionMnemonic()
+            if (mnemonic) {
+                try {
+                    const btcAddress = await getBtcAddress(breezSdk)
+                    if (btcAddress) {
+                        await publishAndVerifyProfile(mnemonic, breezSdk, btcAddress)
+                    }
+                } catch (error) {
+                    console.warn('Unable to re-publish the Nostr profile:', error)
+                }
+            }
+            return 'registered'
+        } catch (error) {
+            console.warn('Unable to claim the Lightning address:', error)
+            return 'failed'
+        }
+    }
+
+    const rememberLightningAddress = (info: NonNullable<Awaited<ReturnType<BreezSdk['getLightningAddress']>>>) => {
+        const address = info.lightningAddress ?? info.lnurl?.url
+        if (!address) return
+        setLnUrl(address)
+        sessionStorage.setItem(WALLET_LN_URL, address)
     }
 
     const getBtcAddress = async (breezSdk: BreezSdk) => {
@@ -434,6 +525,7 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
                 recoverWalletWithPasskey,
                 breezSdk,
                 getLnUrl,
+                claimLightningAddress,
                 getBtcAddress,
                 checkWallet
             }}

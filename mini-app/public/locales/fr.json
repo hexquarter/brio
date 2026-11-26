@@ -225,5 +225,13 @@
     "wallet.settings.nostr.importSuccess": "Profil Nostr importé.",
     "wallet.settings.nostr.importSkipped": "L'import du profil n'est disponible que dans Telegram.",
     "wallet.settings.nostr.importFailed": "Impossible d'importer le profil Nostr : {{reason}}",
-    "wallet.settings.nostr.walletUnavailable": "Le portefeuille n'est pas encore prêt. Réessayez dans un instant."
+    "wallet.settings.nostr.walletUnavailable": "Le portefeuille n'est pas encore prêt. Réessayez dans un instant.",
+    "wallet.receive.customizeAddress.title": "Configurer votre adresse Lightning",
+    "wallet.receive.customizeAddress.description": "Choisissez votre nom d'utilisateur pour recevoir des paiements à votrenom@votredomaine.",
+    "wallet.receive.customizeAddress.placeholder": "votrenom",
+    "wallet.receive.customizeAddress.claimButton": "Réclamer l'adresse",
+    "wallet.receive.customizeAddress.claiming": "Réclamation...",
+    "wallet.receive.customizeAddress.success": "Adresse Lightning réclamée !",
+    "wallet.receive.customizeAddress.failed": "Impossible de réclamer l'adresse Lightning. Veuillez réessayer.",
+    "wallet.receive.customizeAddressButton": "Personnaliser"
 }

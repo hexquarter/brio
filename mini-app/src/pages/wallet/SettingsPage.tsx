@@ -157,22 +157,24 @@ export const WalletSettingsPage : React.FC = () => {
             </section>
 
             <section className="app-card divide-y divide-black/5">
-                <button
-                    type="button"
-                    onClick={() => {
-                        haptics.selection()
-                        setAdvancedOpen(open => !open)
-                    }}
-                    className="flex w-full items-center justify-between gap-3 py-3 text-left"
-                >
-                    <span className="flex flex-col">
-                        <span className="text-sm font-medium">{t('wallet.settings.advanced')}</span>
-                        <span className="text-xs text-gray-400">{t('wallet.settings.advancedDescription')}</span>
-                    </span>
-                    <ChevronDown className={cn('h-4 w-4 shrink-0 text-gray-300 transition-transform', advancedOpen && 'rotate-180')} />
-                </button>
+                <div className="px-4">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            haptics.selection()
+                            setAdvancedOpen(open => !open)
+                        }}
+                        className="flex w-full items-center justify-between gap-3 py-3 text-left"
+                    >
+                        <span className="flex flex-col">
+                            <span className="text-sm font-medium">{t('wallet.settings.advanced')}</span>
+                            <span className="text-xs text-gray-400">{t('wallet.settings.advancedDescription')}</span>
+                        </span>
+                        <ChevronDown className={cn('h-4 w-4 shrink-0 text-gray-300 transition-transform', advancedOpen && 'rotate-180')} />
+                    </button>
+                </div>
                 {advancedOpen && (
-                    <div className="px-4 pb-3">
+                    <div className="px-4 pb-4 pt-1">
                         <NostrProfilePanel />
                     </div>
                 )}
