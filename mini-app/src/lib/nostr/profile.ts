@@ -2,14 +2,14 @@ import type { BreezSdk } from '@breeztech/breez-sdk-spark/web'
 import { nip19 } from 'nostr-tools'
 import { retrieveRawInitData } from '@telegram-apps/sdk-react'
 import { hash } from '@/helpers/crypto'
-import { verifyProfile } from '@/lib/wallet/api'
+import { fetchBotInfo, registerPaymentWebhook, rpcEndpoint, verifyProfile, type RegisterWebhookResponse } from '@/lib/wallet/api'
 import {
   getProfileOverrides,
   markProfileSynced,
   storeProfileOverrides,
   type ProfileOverrides
 } from '@/lib/wallet/session'
-import { publishProfile, fetchNostrProfile } from './client'
+import { publishProfile, fetchNostrProfile, publishBadgeAcceptance, getNostrConfig } from './client'
 import { isMockedTelegramEnv } from '@/lib/telegram/env'
 import { getTelegramUsername } from '@/lib/telegram/username'
 import { deriveNostrIdentity } from './identity'
@@ -86,6 +86,13 @@ export const publishAndVerifyProfile = async (
   }
 
   const contacts = [await hash(telegramUsername.toLowerCase())]
+  // NIP-05 identifier + deep link so other Nostr clients verify the wallet
+  // and can open the Telegram Mini App from the profile.
+  const botUsername = await fetchBotInfo()
+    .then(info => info.username)
+    .catch(() => undefined)
+  const nip05 = `${telegramUsername.toLowerCase()}@${new URL(rpcEndpoint()).hostname}`
+  const website = botUsername ? `https://t.me/${botUsername}/app?startapp=wallet` : undefined
   // Identity fields imported from Nostr (or passed in directly) take
   // precedence over the Telegram defaults.
   const stored = getProfileOverrides()
@@ -99,7 +106,9 @@ export const publishAndVerifyProfile = async (
     lud16: lightningAddress.lightningAddress,
     lightningAddress: lightningAddress.lightningAddress,
     lnurl: lightningAddress.lnurl.url,
-    btcAddress
+    btcAddress,
+    nip05,
+    website
   }, contacts)
 
   const response = await verifyProfile({
@@ -110,5 +119,60 @@ export const publishAndVerifyProfile = async (
   if (!response.ok) throw new Error(JSON.stringify(await response.json()))
 
   markProfileSynced()
+
+  // Best-effort extras: badge acceptance and offline-payment webhooks must
+  // never fail the profile sync itself.
+  try {
+    const config = await getNostrConfig()
+    if (config.servicePublicKey) {
+      await publishBadgeAcceptance(mnemonic, `30009:${config.servicePublicKey}:brio-verified`)
+    }
+  } catch (error) {
+    console.warn('Unable to accept the Brio badge:', error)
+  }
+  try {
+    await registerPaymentWebhookForWallet(mnemonic, sdk, btcAddress)
+  } catch (error) {
+    console.warn('Unable to register the payment webhook:', error)
+  }
+
   return profileEvent
+}
+
+/**
+ * Registers the wallet's offline-payment webhook with the Breez backend.
+ * The backend generates a per-wallet token and returns the URL the SDK
+ * should be called on; incoming Lightning receives and static (on-chain)
+ * deposits then trigger a Telegram DM even when the app is closed.
+ */
+export const registerPaymentWebhookForWallet = async (
+  mnemonic: string,
+  sdk: BreezSdk,
+  btcAddress?: string
+) => {
+  if (isMockedTelegramEnv()) return undefined
+
+  const initData = retrieveRawInitData()
+  if (!initData) throw new Error('Cannot retrieve Telegram init data.')
+
+  const identity = await deriveNostrIdentity(mnemonic)
+  const lightningAddress = await sdk.getLightningAddress()
+
+  const response = await registerPaymentWebhook({
+    nostrPublicKey: identity.publicKey,
+    btcAddress,
+    lightningAddress: lightningAddress?.lightningAddress
+  })
+  if (!response.ok) throw new Error(JSON.stringify(await response.json()))
+  const { webhookUrl, secret } = await response.json() as RegisterWebhookResponse
+  if (!webhookUrl || !secret) return undefined
+
+  return sdk.registerWebhook({
+    url: webhookUrl,
+    secret,
+    eventTypes: [
+      { type: 'lightningReceiveFinished' },
+      { type: 'staticDepositFinished' }
+    ]
+  })
 }

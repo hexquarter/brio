@@ -40,6 +40,21 @@ export const notifyPayment = async (paymentEventId: string) =>
         tgInitData: retrieveRawInitData()
     })
 
+export type RegisterWebhookResponse = {
+    webhookUrl: string
+    secret: string
+}
+
+export const registerPaymentWebhook = async (params: {
+    nostrPublicKey: string
+    btcAddress?: string
+    lightningAddress?: string
+}) =>
+    rpc('register-payment-webhook', {
+        ...params,
+        tgInitData: retrieveRawInitData()
+    })
+
 const priceCache = new Map<string, { price: number; fetchedAt: number }>()
 const PRICE_TTL_MS = 15_000
 

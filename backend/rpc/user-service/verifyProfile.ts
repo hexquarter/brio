@@ -2,8 +2,11 @@ import * as z from 'zod'
 import type { Env } from '../../env.js'
 import { json } from '../../http.js'
 import { verifyTelegramUser } from '../telegram-auth.js'
+import { publishUserBadge } from '../../badge.js'
+import { storeNip05Entry } from '../../nip05.js'
 import {
   getEventById,
+  getRelays,
   getServicePublicKey,
   hashContact,
   publishAttestation
@@ -15,7 +18,7 @@ const VerifyProfileSchema = z.object({
   tgInitData: z.string().min(1)
 })
 
-export const verifyProfileHandler = async (payload: unknown, env: Env) => {
+export const verifyProfileHandler = async (payload: unknown, env: Env, httpRequest: Request) => {
   const parsed = VerifyProfileSchema.safeParse(payload)
   if (!parsed.success) return json({ error: parsed.error }, 400)
 
@@ -53,6 +56,30 @@ export const verifyProfileHandler = async (payload: unknown, env: Env) => {
       profileEventId: profileEvent.id,
       contacts
     })
+
+    // Best-effort extras: the NIP-05 directory entry and the NIP-58 badge
+    // must never block the verification itself.
+    if (telegramUser.username) {
+      try {
+        await storeNip05Entry(
+          env,
+          telegramUser.username.toLowerCase(),
+          request.nostrPublicKey,
+          getRelays(env)
+        )
+      } catch (error) {
+        console.warn('Unable to store the NIP-05 entry:', error)
+      }
+    }
+    try {
+      await publishUserBadge(env, new URL(httpRequest.url).origin, {
+        nostrPublicKey: request.nostrPublicKey,
+        profileEventId: profileEvent.id
+      })
+    } catch (error) {
+      console.warn('Unable to publish the user badge:', error)
+    }
+
     return json({
       status: 'ok',
       attestationId: attestation.id,

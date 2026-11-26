@@ -231,5 +231,6 @@
     "wallet.receive.customizeAddress.claiming": "Réclamation...",
     "wallet.receive.customizeAddress.success": "Adresse Lightning réclamée !",
     "wallet.receive.customizeAddress.failed": "Impossible de réclamer l'adresse Lightning. Veuillez réessayer.",
-    "wallet.receive.customizeAddressButton": "Personnaliser"
+    "wallet.receive.customizeAddressButton": "Personnaliser",
+    "wallet.settings.nostr.nip05": "Identifiant NIP-05"
 }

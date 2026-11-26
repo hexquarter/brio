@@ -231,5 +231,6 @@
     "wallet.receive.customizeAddress.claiming": "क्लेम हो रहा है...",
     "wallet.receive.customizeAddress.success": "लाइटनिंग पता क्लेम हो गया!",
     "wallet.receive.customizeAddress.failed": "लाइटनिंग पता क्लेम नहीं हो सका। कृपया पुनः प्रयास करें।",
-    "wallet.receive.customizeAddressButton": "कस्टमाइज़ करें"
+    "wallet.receive.customizeAddressButton": "कस्टमाइज़ करें",
+    "wallet.settings.nostr.nip05": "NIP-05 पहचानकर्ता"
 }

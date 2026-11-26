@@ -6,4 +6,10 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET?: string
   ENVIRONMENT?: string
   ALLOW_UNVERIFIED_TELEGRAM_DEV?: string
+  // Secret used to derive the per-wallet webhook token. Falls back to
+  // BOT_TOKEN when not set.
+  WEBHOOK_HMAC_SECRET?: string
+  // Optional KV namespace. Enables the wallet registry used by the Spark
+  // webhook handler, the NIP-05 directory and the L1 deposit polling cron.
+  BRIO_KV?: KVNamespace
 }

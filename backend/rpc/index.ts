@@ -4,18 +4,20 @@ import { json } from '../http.js'
 import { botInfoHandler } from './bot-service/bot-info.js'
 import { notifyPaymentHandler } from './payment-service/notifyPayment.js'
 import { verifyProfileHandler } from './user-service/verifyProfile.js'
+import { registerWebhookHandler } from './webhook-service/registerWebhook.js'
 
 const OperationSchema = z.object({
   operation: z.string(),
   payload: z.unknown().optional()
 })
 
-type Handler = (payload: unknown, env: Env) => Promise<Response>
+type Handler = (payload: unknown, env: Env, request: Request) => Promise<Response>
 
 const handlers: Record<string, Handler> = {
   'bot-info': botInfoHandler,
   'verify-profile': verifyProfileHandler,
-  'notify-payment': notifyPaymentHandler
+  'notify-payment': notifyPaymentHandler,
+  'register-payment-webhook': registerWebhookHandler
 }
 
 export const rpcHandler = async (request: Request, env: Env): Promise<Response> => {
@@ -33,7 +35,7 @@ export const rpcHandler = async (request: Request, env: Env): Promise<Response> 
   if (!handler) return json({ error: `invalid operation: ${parsed.data.operation}` }, 400)
 
   try {
-    return await handler(parsed.data.payload ?? {}, env)
+    return await handler(parsed.data.payload ?? {}, env, request)
   } catch (error) {
     console.error(`RPC operation ${parsed.data.operation} failed:`, error)
     return json({ error: 'internal server error' }, 500)

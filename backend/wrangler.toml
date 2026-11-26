@@ -9,5 +9,16 @@ NOSTR_RELAYS = "wss://relay.primal.net,wss://relay.snort.social,wss://relay.nost
 ENVIRONMENT = "production"
 BOT_USERNAME = "brio_dev_bot"
 
+# Create the namespace with:
+#   wrangler kv namespace create BRIO_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "BRIO_KV"
+id = "68b15f604978417a9dcf537246385bd8"
+
+# L1 deposit notifications: poll watched Bitcoin addresses every 2 minutes.
+[triggers]
+crons = ["*/2 * * * *"]
+
 [observability]
 enabled = true

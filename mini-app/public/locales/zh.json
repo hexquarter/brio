@@ -231,5 +231,6 @@
     "wallet.receive.customizeAddress.claiming": "认领中...",
     "wallet.receive.customizeAddress.success": "闪电地址认领成功！",
     "wallet.receive.customizeAddress.failed": "无法认领闪电地址，请重试。",
-    "wallet.receive.customizeAddressButton": "自定义"
+    "wallet.receive.customizeAddressButton": "自定义",
+    "wallet.settings.nostr.nip05": "NIP-05 标识"
 }

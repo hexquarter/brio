@@ -11,6 +11,11 @@ export type NostrProfile = {
   lightningAddress?: string
   lnurl?: string
   btcAddress?: string
+  // NIP-05 identifier (<telegram-username>@<backend-domain>) so other Nostr
+  // clients can verify the wallet's identity.
+  nip05?: string
+  // Telegram Mini App deep link so Nostr clients can open the wallet.
+  website?: string
   nostrPublicKey: string
   updatedAt: number
 }
@@ -243,11 +248,30 @@ export const publishProfile = async (
   })
 }
 
+// NIP-58 badge acceptance (kind 30008): the wallet publishes this from its
+// own key so Nostr clients display the "Verified Brio User" badge on the
+// profile. `badgeIdentifier` is `30009:<servicePublicKey>:<badgeId>` as
+// awarded by the backend.
+export const publishBadgeAcceptance = async (
+  mnemonic: string,
+  badgeIdentifier: string
+) => {
+  const identity = await deriveNostrIdentity(mnemonic)
+  return publish(identity.secretKey, {
+    kind: 30008,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ['a', badgeIdentifier],
+      ['p', identity.publicKey]
+    ],
+    content: ''
+  })
+}
+
 export const publishPayment = async (
   mnemonic: string,
   payment: PaymentPublication
-) => {
-  const identity = await deriveNostrIdentity(mnemonic)
+) => {  const identity = await deriveNostrIdentity(mnemonic)
   const config = await getNostrConfig()
   if (!config.servicePublicKey) {
     throw new Error('The Brio Nostr service public key is not configured.')
