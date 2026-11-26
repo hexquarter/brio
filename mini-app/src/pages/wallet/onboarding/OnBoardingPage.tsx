@@ -130,6 +130,9 @@ export function OnBoardingPage() {
                     <Button variant="secondary" className="w-full" onClick={() => go('/app/nowallet/restore-wallet')}>
                         {t('walletSetup.restoreButton')}
                     </Button>
+                    <Button variant="outline" className="w-full" onClick={() => go('/app/nowallet/nostr-recover')}>
+                        {t('walletSetup.nostrRecoverButton')}
+                    </Button>
                     {hasPasskeyBackup && (
                         <Button
                             variant="outline"

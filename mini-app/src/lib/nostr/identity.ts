@@ -1,6 +1,8 @@
 import * as bip39 from '@scure/bip39'
+import { wordlist } from '@scure/bip39/wordlists/english.js'
 import { HDKey } from '@scure/bip32'
 import { getPublicKey } from 'nostr-tools'
+import { isNostrDerivedWallet } from '@/lib/wallet/session'
 
 export type NostrIdentity = {
   secretKey: Uint8Array
@@ -12,6 +14,20 @@ let cachedIdentity: NostrIdentity | null = null
 
 export const deriveNostrIdentity = async (mnemonic: string): Promise<NostrIdentity> => {
   if (cachedMnemonic === mnemonic && cachedIdentity) return cachedIdentity
+
+  if (isNostrDerivedWallet()) {
+    // Wallets recovered from a Nostr connection encode their Nostr secret
+    // key as the BIP-39 entropy of the recovery phrase, so the identity is
+    // the entropy itself rather than an NIP-06 child key. This keeps the
+    // same nsec/bunker restoring the same identity.
+    const secretKey = bip39.mnemonicToEntropy(mnemonic, wordlist)
+    cachedMnemonic = mnemonic
+    cachedIdentity = {
+      secretKey,
+      publicKey: getPublicKey(secretKey)
+    }
+    return cachedIdentity
+  }
 
   const seed = await bip39.mnemonicToSeed(mnemonic)
   const root = HDKey.fromMasterSeed(seed)

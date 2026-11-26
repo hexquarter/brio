@@ -47,7 +47,9 @@ import {
 import {
     clearDismissedProfileEventId,
     clearFoundProfile,
-    setFoundProfile
+    getSessionWalletSource,
+    setFoundProfile,
+    setNostrDerivedWallet
 } from '@/lib/wallet/session';
 
 export { getSessionMnemonic, storeSessionMnemonic } from '@/lib/wallet/session';
@@ -250,6 +252,7 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         clearContacts()
         clearSessionMnemonic()
         clearNostrIdentity()
+        setNostrDerivedWallet(false)
 
         try {
             await breezSdk?.disconnect()
@@ -304,6 +307,9 @@ export const WalletProvider = ({children}: {children: ReactNode}) => {
         clearDismissedProfileEventId()
         clearContacts()
         clearSecureExport()
+        // Remember wallets derived from a Nostr connection so the Nostr
+        // identity is re-derived from the phrase's entropy after a reload.
+        setNostrDerivedWallet(getSessionWalletSource() === 'nostr')
         storeSessionMnemonic(mnemonic)
         setLnUrl(null)
         setBtcAddress(null)

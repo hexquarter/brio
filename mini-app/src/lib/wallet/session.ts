@@ -2,17 +2,47 @@ const PROFILE_SYNCED_KEY = 'wallet_profile_synced'
 const PROFILE_OVERRIDES_KEY = 'wallet_profile_overrides'
 const PROFILE_FOUND_KEY = 'wallet_profile_found'
 const PROFILE_DISMISSED_KEY = 'wallet_profile_dismissed'
+const NOSTR_DERIVED_KEY = 'wallet_nostr_derived'
 
 let sessionMnemonic: string | null = null
 
+/**
+ * Where the session mnemonic came from. Nostr-derived wallets encode their
+ * Nostr secret key as BIP-39 entropy, so their identity must be derived from
+ * the entropy itself instead of the NIP-06 path (see deriveNostrIdentity).
+ */
+export type WalletSource = 'phrase' | 'nostr'
+
+let sessionWalletSource: WalletSource = 'phrase'
+
 export const getSessionMnemonic = () => sessionMnemonic
 
-export const storeSessionMnemonic = (mnemonic: string) => {
+export const getSessionWalletSource = () => sessionWalletSource
+
+export const storeSessionMnemonic = (mnemonic: string, source: WalletSource = 'phrase') => {
   sessionMnemonic = mnemonic
+  sessionWalletSource = source
 }
 
 export const clearSessionMnemonic = () => {
   sessionMnemonic = null
+  sessionWalletSource = 'phrase'
+}
+
+/**
+ * Whether the stored wallet was created or recovered from a Nostr key
+ * (nsec or bunker). Persisted in localStorage so the Nostr identity can be
+ * re-derived after a reload; cleared when the wallet is reset or replaced
+ * with a classic recovery-phrase wallet.
+ */
+export const isNostrDerivedWallet = () => localStorage.getItem(NOSTR_DERIVED_KEY) === 'true'
+
+export const setNostrDerivedWallet = (value: boolean) => {
+  if (value) {
+    localStorage.setItem(NOSTR_DERIVED_KEY, 'true')
+  } else {
+    localStorage.removeItem(NOSTR_DERIVED_KEY)
+  }
 }
 
 export const isProfileSynced = () => sessionStorage.getItem(PROFILE_SYNCED_KEY) === 'true'

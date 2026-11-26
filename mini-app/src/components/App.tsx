@@ -18,6 +18,7 @@ import { MainPage } from '@/pages/MainPage';
 import { OnBoardingPage } from '@/pages/wallet/onboarding/OnBoardingPage';
 import { CreateWalletPage } from '@/pages/wallet/onboarding/CreateWalletPage';
 import { RestoreWalletPage } from '@/pages/wallet/onboarding/RestoreWalletPage';
+import { NostrRecoverPage } from '@/pages/wallet/onboarding/NostrRecoverPage';
 import { SecureWalletPage } from '@/pages/wallet/onboarding/SecureWalletPage';
 import { WalletMainPage } from '@/pages/wallet/MainPage';
 import { WalletWelcomePage } from '@/pages/wallet/WelcomePage';
@@ -199,6 +200,7 @@ export function App() {
               <Route index Component={OnBoardingPage} />
               <Route path="create-wallet" Component={CreateWalletPage} />
               <Route path="restore-wallet" Component={RestoreWalletPage} />
+              <Route path="nostr-recover" Component={NostrRecoverPage} />
               <Route path="secure-wallet" Component={SecureWalletPage} />
             </Route>
           </Route>
