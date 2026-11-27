@@ -4,10 +4,9 @@ import { rpcHandler } from './rpc/index.js'
 import { getRelays, getServicePublicKey } from './rpc/nostr.js'
 import { handleTelegramWebhook } from './bot/webhook.js'
 import { handleSparkWebhook } from './webhooks/sparkWebhook.js'
-import { handleScheduled } from './webhooks/l1Cron.js'
 import { handleNip05 } from './nip05.js'
 import { handleResolve } from './resolve.js'
-import { handleLnurlPay, handleLnurlVerify, handleApiV2, pollNpubcashQuotes } from './npubcash.js'
+import { handleLnurlPay, handleLnurlVerify, handleApiV2 } from './npubcash.js'
 import { badgeInfoResponse, badgeSvgResponse } from './badge.js'
 
 export default {
@@ -78,22 +77,6 @@ export default {
     } catch (error) {
       console.error('Worker request failed:', error)
       return json({ error: 'internal server error' }, 500, CORS_HEADERS)
-    }
-  },
-
-  // L1 deposit notifications: poll watched Bitcoin addresses via
-  // mempool.space and DM the wallet owner on Telegram. Also refreshes the
-  // npubcash quote states (and publishes settled zap receipts).
-  async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    try {
-      await handleScheduled(env)
-    } catch (error) {
-      console.error('Scheduled L1 poll failed:', error)
-    }
-    try {
-      await pollNpubcashQuotes(env)
-    } catch (error) {
-      console.error('Scheduled npubcash poll failed:', error)
     }
   }
 } satisfies ExportedHandler<Env>

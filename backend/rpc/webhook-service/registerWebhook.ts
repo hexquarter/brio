@@ -16,22 +16,6 @@ const RegisterSchema = z.object({
   lightningAddress: z.string().min(3).max(120).optional()
 })
 
-const MEMPOOL_API = 'https://mempool.space/api'
-
-// Snapshots the latest transactions on the watched address so the L1 cron
-// only reports deposits that arrive after registration.
-const snapshotRecentTxids = async (btcAddress: string): Promise<string[]> => {
-  try {
-    const response = await fetch(`${MEMPOOL_API}/address/${btcAddress}/txs`)
-    if (!response.ok) return []
-    const txs = await response.json() as Array<{ txid?: string }>
-    return txs.map(tx => tx.txid).filter((id): id is string => !!id).slice(0, 25)
-  } catch (error) {
-    console.warn('Unable to snapshot Bitcoin address transactions:', error)
-    return []
-  }
-}
-
 export const registerWebhookHandler = async (payload: unknown, env: Env, request: Request) => {
   const parsed = RegisterSchema.safeParse(payload)
   if (!parsed.success) return json({ error: parsed.error }, 400)
@@ -53,11 +37,6 @@ export const registerWebhookHandler = async (payload: unknown, env: Env, request
     updatedAt: Math.floor(Date.now() / 1000)
   }
 
-  // Seed the L1 watch with the current transaction list so only future
-  // deposits trigger notifications.
-  if (input.btcAddress) {
-    registry.recentTxids = await snapshotRecentTxids(input.btcAddress)
-  }
   await writeWalletRegistry(env, registry, input.nostrPublicKey)
 
   return json({ status: 'ok', webhookUrl, secret })

@@ -7,10 +7,8 @@ export type WalletRegistry = {
   chatId: string
   username?: string
   lightningAddress?: string
-  // Watched Bitcoin address for L1 deposit notifications.
+  // Bitcoin address shown in payment notifications.
   btcAddress?: string
-  // Latest transaction ids seen on the watched address (newest first).
-  recentTxids?: string[]
   updatedAt: number
 }
 
@@ -57,14 +55,17 @@ export const writeWalletRegistry = async (env: Env, registry: WalletRegistry, no
 
 type UnknownRecord = Record<string, unknown>
 
-// The Spark webhook payload shape is not part of the SDK typings. Accept both
-// flat payloads and { event: {...} } envelopes, and the common amount field
-// spellings, so unknown variations still produce a useful notification.
+// Spark webhook payloads are flat JSON objects (also accept an `event` or
+// `payload` envelope). Amounts are `{ value, unit }` objects — SATOSHI or
+// MILLISATOSHI — rather than plain numbers.
 export type ParsedWebhookEvent = {
   type: string
+  status?: string
+  requestStatus?: string
   amountSats?: number
   paymentHash?: string
   txid?: string
+  address?: string
 }
 
 const pick = (source: unknown, keys: string[]) => {
@@ -77,30 +78,71 @@ const pick = (source: unknown, keys: string[]) => {
   return undefined
 }
 
+const toSats = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
+  }
+  if (value && typeof value === 'object') {
+    const record = value as UnknownRecord
+    const raw = Number(record.value)
+    if (!Number.isFinite(raw) || raw <= 0) return undefined
+    const unit = String(record.unit ?? 'SATOSHI').toUpperCase()
+    return Math.floor(unit === 'MILLISATOSHI' ? raw / 1000 : raw)
+  }
+  return undefined
+}
+
+const pickAmount = (event: unknown, keys: string[]) => {
+  for (const key of keys) {
+    const sats = toSats(pick(event, [key]))
+    if (sats) return sats
+  }
+  return undefined
+}
+
 export const parseWebhookEvent = (body: unknown): ParsedWebhookEvent => {
   const event = pick(body, ['event', 'payload']) ?? body
-  const type = String(pick(event, ['type']) ?? 'unknown')
-  const amountMsat = Number(pick(event, ['amountMsat', 'amount_msat']) ?? 0)
-  const amountSatsRaw = Number(pick(event, ['amountSats', 'amount_sats', 'amountSat', 'amount']) ?? 0)
-  const amountSats = amountSatsRaw > 0 ? Math.floor(amountSatsRaw) : amountMsat > 0 ? Math.floor(amountMsat / 1000) : undefined
+  const status = pick(event, ['status'])
+  const requestStatus = pick(event, ['request_status'])
   const paymentHash = pick(event, ['paymentHash', 'payment_hash'])
-  const txid = pick(event, ['txid', 'bitcoinTxid', 'bitcoin_txid', 'txId', 'tx_id'])
+  const txid = pick(event, ['transaction_id', 'coop_exit_txid', 'txid', 'bitcoinTxid', 'bitcoin_txid', 'txId', 'tx_id'])
+  const address = pick(event, ['static_deposit_address', 'withdrawal_address', 'address'])
   return {
-    type,
-    amountSats: amountSats && Number.isFinite(amountSats) && amountSats > 0 ? amountSats : undefined,
+    type: String(pick(event, ['type']) ?? 'unknown'),
+    status: typeof status === 'string' ? status : undefined,
+    requestStatus: typeof requestStatus === 'string' ? requestStatus : undefined,
+    // For static deposits, credit_amount is what actually reached the wallet.
+    amountSats: pickAmount(event, [
+      'credit_amount', 'deposit_amount', 'htlc_amount', 'invoice_amount',
+      'total_amount', 'amountSats', 'amount_sats', 'amountSat', 'amount'
+    ]),
     paymentHash: typeof paymentHash === 'string' ? paymentHash : undefined,
-    txid: typeof txid === 'string' ? txid : undefined
+    txid: typeof txid === 'string' ? txid : undefined,
+    address: typeof address === 'string' ? address : undefined
   }
+}
+
+// Spark signs the raw body with the per-wallet secret via X-Spark-Signature.
+export const safeEqualHex = (expected: string, actual: string): boolean => {
+  const a = expected.toLowerCase()
+  const b = actual.toLowerCase()
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
 }
 
 export const formatReceivedMessage = (event: ParsedWebhookEvent, address?: string) => {
   const amountLine = event.amountSats ? `Amount: ${event.amountSats.toLocaleString('en-US')} sats\n` : ''
-  const isDeposit = event.type.includes('deposit') || event.type.includes('Deposit')
-  const title = isDeposit
+  const type = event.type.toUpperCase()
+  const title = type.includes('STATIC_DEPOSIT')
     ? '₿ On-chain Bitcoin deposit received'
-    : event.type.includes('send')
-      ? '⚡ Payment sent'
-      : '⚡ Payment received'
+    : type.includes('COOP_EXIT')
+      ? '₿ Cooperative exit completed'
+      : type.includes('LIGHTNING_SEND')
+        ? '⚡ Payment sent'
+        : '⚡ Payment received'
   const detail = event.txid ? `\nTx: ${event.txid}` : event.paymentHash ? `\nPayment hash: ${event.paymentHash}` : ''
-  return `${title}\n${amountLine}${address ? `Address: ${address}\n` : ''}${detail}`.trim()
+  const displayAddress = event.address ?? address
+  return `${title}\n${amountLine}${displayAddress ? `Address: ${displayAddress}\n` : ''}${detail}`.trim()
 }

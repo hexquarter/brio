@@ -12,6 +12,6 @@ export interface Env {
   // BOT_TOKEN when not set.
   WEBHOOK_HMAC_SECRET?: string
   // Optional KV namespace. Enables the wallet registry used by the Spark
-  // webhook handler, the NIP-05 directory and the L1 deposit polling cron.
+  // webhook handler, the NIP-05 directory and the npubcash quote store.
   BRIO_KV?: KVNamespace
 }

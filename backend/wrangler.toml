@@ -16,9 +16,5 @@ BOT_USERNAME = "brio_dev_bot"
 binding = "BRIO_KV"
 id = "68b15f604978417a9dcf537246385bd8"
 
-# L1 deposit notifications: poll watched Bitcoin addresses every 2 minutes.
-[triggers]
-crons = ["*/2 * * * *"]
-
 [observability]
 enabled = true

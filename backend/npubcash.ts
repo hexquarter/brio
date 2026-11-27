@@ -73,13 +73,23 @@ const readQuote = async (env: Env, quoteId: string): Promise<QuoteRecord | null>
   return raw ? (JSON.parse(raw) as QuoteRecord) : null
 }
 
-const writeQuote = async (env: Env, record: QuoteRecord) => {
+const QUOTE_TTL_SECONDS = 60 * 60 * 24 * 90
+
+// State refreshes only touch the quote record. Rewriting the per-user index
+// on every poll would waste most of the free-tier 1,000 writes/day budget.
+const updateQuote = async (env: Env, record: QuoteRecord) => {
   if (!env.BRIO_KV) return
   await env.BRIO_KV.put(`${QUOTE_KEY_PREFIX}${record.quote}`, JSON.stringify(record), {
-    expirationTtl: 60 * 60 * 24 * 90
+    expirationTtl: QUOTE_TTL_SECONDS
   })
+}
+
+// The index is only written when a quote is created (and deleted on expiry).
+const writeQuote = async (env: Env, record: QuoteRecord) => {
+  if (!env.BRIO_KV) return
+  await updateQuote(env, record)
   await env.BRIO_KV.put(`${INDEX_KEY_PREFIX}${record.pubkey}:${record.quote}`, '1', {
-    expirationTtl: 60 * 60 * 24 * 90
+    expirationTtl: QUOTE_TTL_SECONDS
   })
 }
 
@@ -256,6 +266,39 @@ const publishZapReceipt = async (env: Env, record: QuoteRecord, request: Event) 
   return event
 }
 
+// ------------------------------------------------------- on-demand refresh
+
+// Quote state and zap receipts are refreshed when payer wallets call the
+// verify endpoint or recipients open their quote list — there is no cron.
+// Returns true when the record changed and should be persisted.
+const refreshQuoteState = async (env: Env, record: QuoteRecord): Promise<boolean> => {
+  let changed = false
+  try {
+    const status = await getMintQuote(env, record.quote, record.mintUrl)
+    if (record.state !== status.state) {
+      record.state = status.state
+      changed = true
+    }
+    if (status.preimage && status.preimage !== record.preimage) {
+      record.preimage = status.preimage
+      changed = true
+    }
+
+    const paid = record.state === 'PAID' || record.state === 'ISSUED'
+    if (paid && record.zapRequest && !record.receiptPublished) {
+      const validated = validateZapRequest(record.zapRequest, record.pubkey, record.amountSats * 1000)
+      if (validated.ok) {
+        await publishZapReceipt(env, record, validated.request)
+        record.receiptPublished = true
+        changed = true
+      }
+    }
+  } catch (error) {
+    console.warn(`Unable to refresh quote ${record.quote}:`, error)
+  }
+  return changed
+}
+
 // ------------------------------------------------------------------- LNURL
 
 const METADATA = (identifier: string) => JSON.stringify([
@@ -356,14 +399,8 @@ export const handleLnurlVerify = async (request: Request, env: Env): Promise<Res
   const record = await readQuote(env, quoteId)
   if (!record) return json({ status: 'ERROR', reason: 'unknown quote' }, 404)
 
-  try {
-    const status = await getMintQuote(env, record.quote, record.mintUrl)
-    record.state = status.state
-    if (status.preimage) record.preimage = status.preimage
-    await writeQuote(env, record)
-  } catch (error) {
-    console.warn('Unable to refresh the mint quote:', error)
-  }
+  // Payer wallets poll this endpoint repeatedly; persist only transitions.
+  if (await refreshQuoteState(env, record)) await updateQuote(env, record)
 
   const paid = record.state === 'PAID' || record.state === 'ISSUED'
   return json({
@@ -429,16 +466,9 @@ export const handleApiV2 = async (request: Request, env: Env): Promise<Response>
       const record = await readQuote(env, quoteId)
       if (!record) continue
       // Refresh unsettled quotes against the mint so claimers see fresh state.
-      if (record.state === 'INFLIGHT') {
-        try {
-          const status = await getMintQuote(env, record.quote, record.mintUrl)
-          record.state = status.state
-          if (status.preimage) record.preimage = status.preimage
-          await writeQuote(env, record)
-        } catch (error) {
-          console.warn(`Unable to refresh quote ${record.quote}:`, error)
-        }
-      }
+      const needsRefresh = record.state === 'INFLIGHT' || record.state === 'UNPAID'
+        || (record.state === 'PAID' && Boolean(record.zapRequest) && !record.receiptPublished)
+      if (needsRefresh && await refreshQuoteState(env, record)) await updateQuote(env, record)
       quotes.push({
         quote: record.quote,
         mintUrl: record.mintUrl,
@@ -458,52 +488,3 @@ export const handleApiV2 = async (request: Request, env: Env): Promise<Response>
   return json({ error: 'not found' }, 404)
 }
 
-// ------------------------------------------------------------------- cron
-
-// Unsettled states that the poller should keep refreshing against the mint.
-const CLAIMABLE_STATES = new Set<QuoteState>(['INFLIGHT', 'UNPAID'])
-
-// Polls unsettled quotes against the mint, flips them to PAID/ISSUED and
-// publishes NIP-57 zap receipts once a payment settles. Runs from the cron
-// handler; keeps per-run work bounded.
-export const pollNpubcashQuotes = async (env: Env): Promise<void> => {
-  if (!env.BRIO_KV) return
-  const page = await env.BRIO_KV.list({ prefix: QUOTE_KEY_PREFIX })
-  const now = Math.floor(Date.now() / 1000)
-
-  for (const key of page.keys.slice(0, 40)) {
-    const quoteId = key.name.slice(QUOTE_KEY_PREFIX.length)
-    const record = await readQuote(env, quoteId)
-    if (!record || !CLAIMABLE_STATES.has(record.state)) continue
-    // Drop quotes nobody paid within 24h; mints expire them anyway.
-    if (now - record.createdAt > 60 * 60 * 24) {
-      await env.BRIO_KV.delete(`${QUOTE_KEY_PREFIX}${record.quote}`)
-      await env.BRIO_KV.delete(`${INDEX_KEY_PREFIX}${record.pubkey}:${record.quote}`)
-      continue
-    }
-
-    try {
-      const status = await getMintQuote(env, record.quote, record.mintUrl)
-      if (!status.paid) continue
-      record.state = status.state
-      if (status.preimage) record.preimage = status.preimage
-      record.paidAt = now
-      await writeQuote(env, record)
-
-      if (record.zapRequest && !record.receiptPublished) {
-        try {
-          const validated = validateZapRequest(record.zapRequest, record.pubkey, record.amountSats * 1000)
-          if (validated.ok) {
-            await publishZapReceipt(env, record, validated.request)
-            record.receiptPublished = true
-            await writeQuote(env, record)
-          }
-        } catch (error) {
-          console.warn('Unable to publish the zap receipt:', error)
-        }
-      }
-    } catch (error) {
-      console.warn(`Unable to refresh quote ${quoteId}:`, error)
-    }
-  }
-}
